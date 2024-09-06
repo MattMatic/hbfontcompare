@@ -1,0 +1,651 @@
+<html>
+<head>
+  <title>HarfBuzz JS Font Compare Tool</title>
+  <style>
+    body {
+      font-family: "Calibri";
+      background-color: #c0e0c0;
+    }
+    table, th, td {
+      border-collapse: collapse;
+      border: 2px solid #c0d0c0;
+      padding: 3px;
+    }
+    .label {
+      text-align: right;
+      font-weight: bold;
+    }
+    .svg {
+      background-color: #f0f8f0;
+      padding:6px;
+    }
+    input {
+      background-color: #d0e0d0;
+      accent-color: #608060;
+    }
+    input[type="range"] {
+      background-color: #d0e0d0;
+      accent-color: #586858;
+    }
+    button {
+      background-color: #c0d0c0;
+    }
+    #text {
+      font-size: 150%;
+    }
+    #script,#language {
+      font-family: 'Lucida Console';
+    }
+    #shapeResult,#shapeResult2 {
+      font-family: 'Lucida Console';
+      font-size: 80%;
+    }
+  </style>
+</head>
+<meta charset="utf-8">
+<h1>HarfBuzz JS Font Compare</h1>
+
+<table border=1 width="100%">
+  <tr>
+    <td class='label' width="10%">Text:</td>
+    <td colspan=2>
+      <input type="text" value="abc" id="text">
+      <button id="btnShowLines" onclick="ToggleTextLines();">Show Lines</button>
+      <button id="btnGotoLineFirst" onclick="gotoLineFirst();" accesskey='1' hidden>First (Alt-1)</button>
+      <button id="btnGotoLinePrev" onclick="gotoLineOfs(-1);" accesskey='2' hidden>Prev (Alt-2)</button>
+      <button id="btnGotoLineNext" onclick="gotoLineOfs(1);" accesskey='3' hidden>Next (Alt-3)</button>
+      <button id="btnGotoLineLast" onclick="gotoLineLast();" accesskey='4' hidden>Last (Alt-4)</button>
+      </br>
+      <div id="textLinesDiv" hidden><textarea id="textLines" cols="50" rows="30"></textarea></div>
+    </td>
+  </tr>
+  <tr><td class='label' width="10%">Script/Lang/Dir:</td>
+    <td colspan=2>
+      <input type="text" value="" id="script">,
+      <input type="text" value="" id="language">
+      <input type="radio" id="dirLTR"   name="direction" value="LTR" checked>
+        <label for="dirLTR">LTR</label>
+      <input type="radio" id="dirRTL"   name="direction" value="RTL">
+        <label for="dirRTL">RTL</label>
+    </td></tr>
+  <tr><td class='label' width="10%">Features:</td>
+    <td>
+      <input type="text" value="" id="features"> <font size=-1>e.g. '-liga,+jalt,+ss02'</font>
+    </td></tr>
+  <!--<tr><td>Font:</td><td><input type="text" value="" id="fontFile1"></td></tr>-->
+  <tr><td class='label' >Font Drag & Drop:</td><td>
+    <input type="radio" id="fontOne" name="whichFont" value="1" checked>
+      <label for="whichFont">#1</label>
+      <button type="button" id="swapFonts" onclick="SwapFonts();">Swap #1 & #2</button>
+    </td><td>
+    <input type="radio" id="fontTwo" name="whichFont" value="2">
+      <label for="colourGlyph">#2</label>
+    <button type="button" id="resetFontTwo" onclick="ResetFontTwo();">Reset #2</button>
+  </td></tr>
+  <tr>
+    <td class='label'>Name:</td>
+    <td><div id='fileName1'></div></td>
+    <td><div id='fileName2'></div></td>
+  </tr>
+  <tr><td class='label' >Scale:</td>
+    <td colspan=2>
+      <input type="range" value="1000" min="100" max="4000" step="10" id="scale" ondblclick="scale.value=1000; updateResult();">
+        <label for="scale" id="scaleLabel">1000</label>
+    </td>
+  </tr>
+  <tr><td class='label' >Stretch/Offset:</td>
+    <td><input type="range" value="0" min="0" max="500" id="stretch"></td>
+    <td><input type="range" value="0" min="0" max="4000" id="offset2"></td>
+  </tr>
+  <tr><td class='label' >Color:</td>
+  <td>
+    <input type="radio" id="colourGlyph"   name="colour" value="glyph">
+      <label for="colourGlyph">Glyph</label>
+    <input type="radio" id="colourCluster" name="colour" value="cluster">
+      <label for="colourCluster">Cluster</label>
+    <input type="radio" id="colourSolid"   name="colour" value="solid" checked>
+      <label for="colourSolid">Solid</label>
+    <input type="text" id="solid1" value="#202080">
+    </td>
+    <td>
+    <input type="radio" id="colourGlyph2"   name="colour2" value="glyph">
+      <label for="colourGlyph2">Glyph</label>
+    <input type="radio" id="colourCluster2" name="colour2" value="cluster">
+      <label for="colourCluster2">Cluster</label>
+    <input type="radio" id="colourSolid2"   name="colour2" value="solid" checked>
+      <label for="colourSolid2">Solid</label>
+    <input type="text" id="solid2" value="#f37418">
+    </td>
+  </tr>
+  <tr><td class='label'>Opacity Fill:</td>
+    <td>
+      <input type="range" value="0.7" min="0" max="1.0" step="0.01" id="opacityFill">
+    </td>
+    <td>
+      <input type="range" value="0.3" min="0" max="1.0" step="0.01" id="opacityFill2">
+    </td>
+  </tr>
+  <tr><td class='label'>Opacity Stroke:</td>
+    <td>
+      <input type="range" value="0.0" min="0" max="1.0" step="0.01" id="opacityStroke">
+    </td>
+    <td>
+      <input type="range" value="0.0" min="0" max="1.0" step="0.01" id="opacityStroke2">
+    </td>
+  </tr>
+  <tr><td class='label'>Stroke Width:</td>
+    <td>
+      <input type="range" value="7" min="1" max="51" step="1" id="strokeWidth">
+    </td>
+    <td>
+      <input type="range" value="7" min="1" max="51" step="1" id="strokeWidth2">
+    </td>
+  </tr>
+  <tr>
+    <td class='label'>Options:</td>
+    <td>
+      <input type="checkbox" id="showGids"><label for="showGids">GIDs</label>
+      <input type="checkbox" id="baseLine"><label for="baseLine">Baseline</label>
+      <!--<input type="checkbox" id="exclusion"><label for="exclusion">Exclusion</label>-->
+      <!--<input type="checkbox" id="showBbox"><label for="showBbox">Bounds</label>-->
+    </td>
+    <td></td>
+  </tr>
+<!--<p>Colour: <input type="checkbox" id="colourEnabled" checked></p>-->
+
+<tr><td class='svg' colspan=3>
+<!--<a id="svgResult" href="#" title="Click to download"></a>-->
+<div class='svg' id=svgResult></div>
+<p><button id="saveSvg" onclick="DownloadSvg();">Download SVG</button>
+</td></tr>
+<tr>
+  <td class='label' width="10%">Result:</td>
+  <td width="45%"><div id="shapeResult"></div></td>
+  <td width="45%"><div id="shapeResult2"></div></td>
+</tr>
+</table>
+<!--
+<p>Debug1:<div id="debugResult"></div></p>
+<p>Debug2:<div id="debugResult2"></div></p>
+<p>Debug3:<div id="debugResult3"></div></p>
+--->
+
+<script src="hbjs.js"></script> <!-- Wrapper, can be used without -->
+<script>
+'use strict';
+
+//----------------------------------
+// Matt Page / MattMatic
+// 2024
+//----------------------------------
+
+// Used for colouration of glyphs or clusters
+const glyphColors = ['#bb87e3','#bc6b0e','#57118c','#64902e','#91bbec','#d65e02','#1d5799','#984c11','#271909'];
+
+//----------------------------------
+// HarfBuzz SVG Class
+//----------------------------------
+class hbSvgClass {
+  constructor() {
+    this.options = {};
+    this.results = {};
+  }
+  destroy() {
+    this.freeFont();
+    delete(this.fontBlob);
+  }
+  freeFontBlob() {
+    this.freeFont();
+    this.fileName = null;
+    delete(this.fontBlob);
+  }
+  freeFont() {
+    this.results = {};
+    if (this.font) { this.font.destroy(); delete(this.font); }
+    if (this.face) { this.face.destroy(); delete(this.face); }
+    if (this.blob) { this.blob.destroy(); delete(this.blob); }
+  }
+  setFontBlob(fb, fileName) {
+    this.freeFont();
+    this.fileName = fileName;
+    this.fontBlob = fb;
+    if (!fb) return;
+    this.blob = hb.createBlob(this.fontBlob);
+    this.face = hb.createFace(this.blob, 0);
+    this.font = hb.createFont(this.face);
+  }
+  copyOptions(fromOptions) {
+    this.options = structuredClone(fromOptions);
+  }
+  toSvg(text) {
+    return window.hbToSvg(this, text, this.options);
+  }
+  swapWith(other) {
+    var b1 = this.fontBlob;
+    var f1 = this.fileName;
+    var b2 = other.fontBlob;
+    var f2 = other.fileName;
+    this.setFontBlob(b2, f2);
+    other.setFontBlob(b1, f1);
+  }
+}
+
+
+var hb;
+var hbsvg1 = new hbSvgClass();
+var hbsvg2 = new hbSvgClass();
+
+function SwapFonts() {
+  hbsvg1.swapWith(hbsvg2);
+  updateResult();
+}
+
+function ResetFontTwo() {
+  hbsvg2.freeFontBlob();
+  updateResult();
+}
+
+function formatJson(json) {
+  return JSON.stringify(json).replace('[', '[\r\n').replace(/},/g, '},\r\n');
+}
+
+function DownloadSvg() {
+  var tempLink = document.createElement("a");
+  var taBlob = new Blob([svgResult.innerHTML.replace(' height="512"', '')], { type: 'text/plain' });
+  tempLink.setAttribute('href', URL.createObjectURL(taBlob));
+  tempLink.setAttribute('download', text.value + '.svg');
+  tempLink.click();
+  URL.revokeObjectURL(tempLink.href);
+}
+
+function ToggleTextLines() {
+  if (textLinesDiv.hidden) {
+    textLinesDiv.hidden = false;
+    btnShowLines.innerText = "Hide Lines";
+    btnGotoLineFirst.hidden = false;
+    btnGotoLinePrev.hidden = false;
+    btnGotoLineNext.hidden = false;
+    btnGotoLineLast.hidden = false;
+  }
+  else {
+    textLinesDiv.hidden = true;
+    btnShowLines.innerText = "Show Lines";
+  }
+}
+
+var lineNo = 0;
+var mya = [];
+
+function LoadLine() {
+  if (lineNo < 0) lineNo = 0;
+  if (lineNo >= mya.length) lineNo = mya.length - 1;
+  while ((lineNo > 0) && !mya[lineNo]) lineNo--;
+  while ((lineNo < mya.length) && !mya[lineNo]) lineNo++;
+  if (mya[lineNo]) {
+    text.value = mya[lineNo];
+    updateResult();
+  }
+}
+
+function gotoLineFirst() {
+  lineNo = 0;
+  LoadLine();
+}
+
+function gotoLineOfs(ofs) {
+  lineNo += ofs;
+  LoadLine();
+}
+
+function gotoLineLast() {
+  lineNo = mya.length - 1;
+  LoadLine();
+}
+
+function updateTextLines() {
+  mya = textLines.value.split(/\r?\n+/g);
+  mya = mya.flat();
+}
+
+function updateResult() {
+  scaleLabel.innerText = scale.value;
+
+  var svgPath = '';
+
+  /*
+  if (exclusion.checked) {
+    svgPath += '<path d="M-250 -1800 l0 3000 l8000 0 l0 -3000 z" fill="#c0c0c0"/>'
+  }
+  */
+  if (baseLine.checked) {
+    svgPath +=
+      '<path style="stroke:#ff4040;stroke-opacity:0.5;stroke-width:5" d="M-300 0 L8000 0"></path>'+
+      '<path style="stroke:#ff4040;stroke-opacity:0.5;stroke-width:5" d="M0 -1500 L0 3000"></path>';
+  }
+
+  if (script.value !== '') {
+    hbsvg2.options.script = script.value;
+    hbsvg2.options.language = language.value;
+    if (dirLTR.checked)
+      hbsvg2.options.direction = 'ltr';
+    else
+      hbsvg2.options.direction = 'rtl';
+  } else {
+    hbsvg2.options.script = '';
+    hbsvg2.options.language = '';
+    hbsvg2.options.direction = '';
+  }
+  hbsvg2.options.featureString = features.value;
+  hbsvg2.options.scale = scale.value;
+  hbsvg2.options.x_stretch = parseInt(stretch.value, 10);
+  hbsvg2.options.x = parseInt(offset2.value, 10);
+
+  hbsvg2.options.colour_solid = solid2.value;// '#f37418';
+  hbsvg2.options.colour_mode = 0;
+  hbsvg2.options.opacity_fill = opacityFill2.value;
+  hbsvg2.options.opacity_stroke = opacityStroke2.value;
+  hbsvg2.options.stroke_width = strokeWidth2.value;
+  hbsvg2.options.colour_mode = 0;
+  if (colourGlyph2.checked) hbsvg2.options.colour_mode= 1;
+  if (colourCluster2.checked) hbsvg2.options.colour_mode = 2;
+
+  hbsvg1.copyOptions(hbsvg2.options);
+  hbsvg1.options.x = 0;
+  hbsvg1.options.colour_solid = solid1.value; //'#1685f3';
+  hbsvg1.options.colour_mode = 0;
+  /*
+  if (exclusion.checked) {
+    hbsvg1.options.blendMode = 'multiply';
+  }
+  */
+  hbsvg1.options.showGids = showGids.checked;
+  if (colourGlyph.checked) hbsvg1.options.colour_mode= 1;
+  if (colourCluster.checked) hbsvg1.options.colour_mode = 2;
+
+  hbsvg1.options.opacity_fill = opacityFill.value;
+  hbsvg1.options.opacity_stroke = opacityStroke.value;
+  hbsvg1.options.stroke_width = strokeWidth.value;
+
+  if (hbsvg2.fontBlob) {
+    svgPath += hbsvg2.toSvg(text.value);
+    shapeResult2.innerText = formatJson(hbsvg2.results.json || '');
+  } else {
+    shapeResult2.innerText = '';
+  }
+  if (hbsvg1.fontBlob) {
+    svgPath += hbsvg1.toSvg(text.value);
+    shapeResult.innerText = formatJson(hbsvg1.results.json || '');
+  } else {
+    shapeResult.innerText = '';
+  }
+  fileName1.innerText = hbsvg1.fileName || '';
+  fileName2.innerText = hbsvg2.fileName || '';
+
+
+  // NOTE: Origin 0,0 is top left.
+  var xmin = -250;    // Space to the LEFT
+  var ymin = -1800;   // Space ABOVE
+  var height = 3000;
+  var heightOut = 400;
+  var width = (window.innerWidth) * height / heightOut * 0.95;
+
+  var bbox = xmin + ' ' + ymin + ' ' + width + ' ' + height;
+
+  var ih = '<svg xmlns="http://www.w3.org/2000/svg"'
+    +' height="'+heightOut+'"'
+    +' viewBox="' + bbox + '"'
+    +'>';
+  ih += svgPath + '</svg>';
+  svgResult.innerHTML = ih;
+
+  //debugResult.innerText = 'upem='+hbsvg1.face.upem;
+}
+
+// We could use instantiateStreaming but it's not supported in Safari yet
+// https://bugs.webkit.org/show_bug.cgi?id=173105
+var wasmUrl = 'hb.wasm';
+if (window.origin == 'null') wasmUrl = 'https://harfbuzz.github.io/harfbuzzjs/hb.wasm';
+
+fetch(wasmUrl).then(function (x) {
+  return x.arrayBuffer();
+}).then(function (wasm) {
+  return WebAssembly.instantiate(wasm);
+}).then(function (result) {
+  window.hb = hbjs(result.instance);
+  var fontname = 'https://www.photon.me.uk/fonts/Gulzar-Regular-1.002.ttf';
+  //var fontname = 'https://harfbuzz.github.io/harfbuzzjs/Roboto.abc.ttf';
+  fetch(fontname).then(function (res) {
+    return res.arrayBuffer();
+  }).then(function (blob) { // can be used without our wrapper
+    window.fontBlob = new Uint8Array(blob);
+    hbsvg1.setFontBlob(window.fontBlob, fontname);
+    hbsvg2.freeFontBlob();
+    updateResult();
+    //fontTwo.checked = true;
+  });
+});
+
+function UpdateListener(id, event) {
+  var e = document.getElementById(id);
+  if (e) {
+    e.addEventListener(event, function(e) {
+      updateResult();
+    });
+  }
+}
+
+document.addEventListener('dragover', function (e) {
+  e.stopPropagation(); e.preventDefault();
+}, false);
+document.addEventListener('dragleave', function (e) {
+  e.stopPropagation(); e.preventDefault();
+}, false);
+document.addEventListener('drop', function (e) {
+  e.stopPropagation(); e.preventDefault();
+  //ef.value = e.dataTransfer.files[0];
+  handleFontUpdate(e.dataTransfer.files[0]);
+});
+
+function handleFontUpdate(file) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.addEventListener("load", function () {
+    window.fontBlob = new Uint8Array(reader.result);
+    if (fontOne.checked)
+      hbsvg1.setFontBlob(window.fontBlob, reader.fileName);
+    else
+      hbsvg2.setFontBlob(window.fontBlob, reader.fileName);
+    updateResult();
+  });
+  reader.fileName = file.webkitRelativePath + file.name + ' ('+file.lastModifiedDate.toDateString()+')';
+  reader.readAsArrayBuffer(file);
+}
+
+// Operate on results of font.pathToJson(gid)
+function glyphToRelative(glyph, retxy) {
+  var r = [];
+  var x = 0;
+  var y = 0;
+  var last_x, last_y;
+  var res = glyph.reduce( (acc,w) => {
+    var v = {};
+    v.type = w.type.toLowerCase();
+    v.values = w.values.map( function(z, i) {
+      if (i%2)
+      {
+        last_y = z;
+        return -(z - y);
+      } else
+      {
+        last_x = z;
+        return z - x;
+      }
+      });
+    x = last_x;
+    y = last_y;
+    return acc.concat(v);
+  }, []);
+  // Go back to relative origin...
+  if (retxy) {
+    var v = {}
+    v.type = 'm';
+    v.values = [-x, y];
+    res.push(v);
+  }
+  return res;
+}
+
+function jsonToSvg(pathArray) {
+  var res = pathArray.reduce( (acc, gl) => {
+    var v = gl.type + gl.values.join(' ');
+    return acc.concat(v);
+  }, '');
+  return res;
+}
+
+function hbToSvg(obj, text, options)
+{
+  obj = obj || {};
+  if (!("blob" in obj)) obj.blob = hb.createBlob(obj.fontBlob);
+  if (!("face" in obj)) obj.face = hb.createFace(obj.blob, 0);
+  if (!("font" in obj)) obj.font = hb.createFont(obj.face);
+  var font = obj.font;
+  if ("scale" in options)
+    font.setScale(options.scale, options.scale); // Optional, if not given will be in font upem
+  var buffer = hb.createBuffer();
+  buffer.addText(text);
+
+  buffer.guessSegmentProperties();
+  if (options.script && options.script.length > 0) {
+    buffer.setScript(options.script || 'latn');
+  }
+  if (options.language && options.language.length > 0) {
+    buffer.setLanguage(options.language);
+  }
+  if (options.direction && options.direction.length > 0) {
+    buffer.setDirection(options.direction || 'ltr');
+  }
+  var featureString = `+DUMY,${options.featureString},`; // Copied from Crowbar... "SERIOUSLY?"
+  hb.shapeWithTrace(font, buffer, featureString);
+
+  var result = buffer.json(font);
+
+  // returns glyphs paths, totally optional
+  var glyphs = {};
+  var paths  = {};
+  result.forEach(function (x) {
+    if (glyphs[x.g]) return;
+    glyphs[x.g] = font.glyphToJson(x.g);
+    paths[x.g]  = font.glyphToPath(x.g);
+  });
+  buffer.destroy();
+
+  var opacf = options.opacity_fill; // || 0.7
+  var opacs = options.opacity_stroke;// || 0.3;
+  var stroke_width = options.stroke_width || 11;
+  var x_stretch = options.x_stretch || 0;
+  var svgPath = '';
+  var x = options.x || 0;
+  var y = options.y || 0;
+  var colour_i = 0;
+  var cluster_n = -1;
+  var colour_mode = options.colour_mode || 0;
+  var colour_solid = options.colour_solid || '#f37418'; // #0523d4 (blue)
+  var r;
+  var idx = 0;
+
+  for (r of result) {
+    var colourGlyph = colour_solid;
+    var colourStroke = colour_solid;
+    var colourText = colour_solid;
+    if (!colour_mode == 0)
+    {
+      if (colour_mode == 1) {
+        colour_i++;
+      } else
+      if (colour_mode == 2) {
+        if (cluster_n != r.cl) {
+          colour_i++;
+        }
+      }
+      cluster_n = r.cl;
+      colourGlyph = glyphColors[colour_i%glyphColors.length];
+      colourStroke = colour_solid;
+      colourText = colourGlyph;
+    } else {
+      colour_i++;
+      colourStroke = glyphColors[colour_i%glyphColors.length];
+      colourText = colourStroke;
+    }
+    var blendMode = options.blendMode || 'normal';
+    var path =
+        '<path style="fill:'
+          +colourGlyph
+          +';stroke:'+colourStroke
+          //+';paint-order:stroke'+
+          +';fill-opacity:'+opacf+';stroke-opacity:'+opacs+';stroke-width:'+stroke_width
+          +'; mix-blend-mode: '+blendMode+'" '
+        +'d="M'+x+' '+y+' '         // The absolute origin
+        +'m'+r.dx+' '+(-r.dy)+' '   // negative y because the SVG coordinates are upside down
+         +jsonToSvg(glyphToRelative(glyphs[r.g], false))
+        +'"/>\r\n';
+    if (options.showGids) {
+      var xOfs = 0; //r.dx
+      var fontSize = 100 * options.scale / 1000;
+      var yOfs = -650 - (idx % 4) * 130;
+      yOfs = yOfs * options.scale / 1000;
+      path += '<text font-size="'+fontSize+'" x="'+(x+xOfs)+'" y="'+(y-yOfs)+'" fill="'+colourText+'">'+r.g+'</text>';
+      idx++;
+    }
+    svgPath += path;
+    x += r.ax + x_stretch;
+    y += r.ay;
+  }
+  obj.results.x_end = x;
+  obj.results.y_end = y;
+  obj.results.svgPath = svgPath;
+  obj.results.json = result; // the JSON result
+  return svgPath;
+}
+
+// Glue update events...
+UpdateListener('text', 'keyup');
+UpdateListener('script', 'keyup');
+UpdateListener('language', 'keyup');
+UpdateListener('dirLTR', 'input');
+UpdateListener('dirRTL', 'input');
+UpdateListener('stretch', 'input');
+UpdateListener('offset2', 'input');
+UpdateListener('opacityFill', 'input');
+UpdateListener('opacityStroke', 'input');
+UpdateListener('strokeWidth', 'input');
+UpdateListener('opacityFill2', 'input');
+UpdateListener('opacityStroke2', 'input');
+UpdateListener('strokeWidth2', 'input');
+UpdateListener('colourGlyph', 'input');
+UpdateListener('colourCluster', 'input');
+UpdateListener('colourSolid', 'input');
+UpdateListener('solid1', 'input');
+UpdateListener('colourGlyph2', 'input');
+UpdateListener('colourCluster2', 'input');
+UpdateListener('colourSolid2', 'input');
+UpdateListener('solid2', 'input');
+UpdateListener('scale', 'input');
+UpdateListener('fontOne', 'input');
+UpdateListener('fontTwo', 'input');
+UpdateListener('showGids', 'input');
+UpdateListener('features', 'input');
+UpdateListener('baseLine', 'input');
+UpdateListener('exclusion', 'input');
+
+document.getElementById('textLines').addEventListener('input', function(e) {
+    updateTextLines();
+});
+
+</script>
+
+<p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>
+<p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
+<p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
+</br>Version: 2024-09-06</p>
+</html>
