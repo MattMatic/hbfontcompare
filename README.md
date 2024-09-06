@@ -3,6 +3,10 @@ A HarfBuzz JS shaping and font comparison web-based tool.
 
 It was based on code from the harfbuzzjs demo - https://github.com/harfbuzz/harfbuzzjs.
 
+# Live
+
+https://mattmatic.github.io/hbfontcompare/
+
 # Usage
 
 - Drag and drop the font file onto the window
