@@ -404,7 +404,7 @@ function updateResult() {
 // We could use instantiateStreaming but it's not supported in Safari yet
 // https://bugs.webkit.org/show_bug.cgi?id=173105
 var wasmUrl = 'hb.wasm';
-if (window.origin == 'null') wasmUrl = 'https://harfbuzz.github.io/harfbuzzjs/hb.wasm';
+if (window.origin == 'null') wasmUrl = 'https://mattmatic.github.io/hbfontcompare/hb.wasm';
 
 fetch(wasmUrl).then(function (x) {
   return x.arrayBuffer();
@@ -412,8 +412,7 @@ fetch(wasmUrl).then(function (x) {
   return WebAssembly.instantiate(wasm);
 }).then(function (result) {
   window.hb = hbjs(result.instance);
-  var fontname = 'https://www.photon.me.uk/fonts/Gulzar-Regular-1.002.ttf';
-  //var fontname = 'https://harfbuzz.github.io/harfbuzzjs/Roboto.abc.ttf';
+  var fontname = 'https://mattmatic.github.io/hbfontcompare/samples/Gulzar-Regular-1.002.ttf';
   fetch(fontname).then(function (res) {
     return res.arrayBuffer();
   }).then(function (blob) { // can be used without our wrapper
