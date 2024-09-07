@@ -456,8 +456,9 @@ function handleFontUpdate(file) {
       hbsvg2.setFontBlob(window.fontBlob, reader.fileName);
     updateResult();
   });
-  reader.fileName = file.webkitRelativePath + file.name + ' ('+file.lastModifiedDate.toDateString()+')';
-  reader.readAsArrayBuffer(file);
+  var fdate = new Date(file.lastModified);
+  reader.fileName = file.webkitRelativePath + file.name  + ' ('+fdate.toDateString()+')';
+  reader.readAsArrayBuffer(file);  reader.readAsArrayBuffer(file);
 }
 
 // Operate on results of font.pathToJson(gid)
