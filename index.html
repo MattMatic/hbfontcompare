@@ -47,16 +47,13 @@
 
 <table border=1 width="100%">
   <tr>
-    <td class='label' width="10%">Text:</td>
-    <td colspan=2>
+    <td class='label'width="10%">Text:</td>
+    <td colspan=2 id='textdrop'>
       <input type="text" value="abc" id="text">
-      <button id="btnShowLines" onclick="ToggleTextLines();">Show Lines</button>
       <button id="btnGotoLineFirst" onclick="gotoLineFirst();" accesskey='1' hidden>First (Alt-1)</button>
       <button id="btnGotoLinePrev" onclick="gotoLineOfs(-1);" accesskey='2' hidden>Prev (Alt-2)</button>
       <button id="btnGotoLineNext" onclick="gotoLineOfs(1);" accesskey='3' hidden>Next (Alt-3)</button>
       <button id="btnGotoLineLast" onclick="gotoLineLast();" accesskey='4' hidden>Last (Alt-4)</button>
-      </br>
-      <div id="textLinesDiv" hidden><textarea id="textLines" cols="50" rows="30"></textarea></div>
     </td>
   </tr>
   <tr><td class='label' width="10%">Script/Lang/Dir:</td>
@@ -73,19 +70,15 @@
       <input type="text" value="" id="features"> <font size=-1>e.g. '-liga,+jalt,+ss02'</font>
     </td></tr>
   <!--<tr><td>Font:</td><td><input type="text" value="" id="fontFile1"></td></tr>-->
-  <tr><td class='label' >Font Drag & Drop:</td><td>
-    <input type="radio" id="fontOne" name="whichFont" value="1" checked>
-      <label for="whichFont">#1</label>
+  <tr><td class='label' >Font Drag & Drop:</td><td id='dropOne'>
       <button type="button" id="swapFonts" onclick="SwapFonts();">Swap #1 & #2</button>
-    </td><td>
-    <input type="radio" id="fontTwo" name="whichFont" value="2">
-      <label for="colourGlyph">#2</label>
+    </td><td id='dropTwo'>
     <button type="button" id="resetFontTwo" onclick="ResetFontTwo();">Reset #2</button>
   </td></tr>
   <tr>
-    <td class='label'>Name:</td>
-    <td><div id='fileName1'></div></td>
-    <td><div id='fileName2'></div></td>
+    <td class='label'>Font:</td>
+    <td id='dropName1'><div id='fontName1'></div></td>
+    <td id='dropName2'><div id='fontName2'></div></td>
   </tr>
   <tr><td class='label' >Scale:</td>
     <td colspan=2>
@@ -170,7 +163,8 @@
 <p>Debug3:<div id="debugResult3"></div></p>
 --->
 
-<script src="hbjs.js"></script> <!-- Wrapper, can be used without -->
+<script type="text/javascript" src="hbjs.js"></script> <!-- Wrapper, can be used without -->
+<script type="text/javascript" src="fontname.min.js"></script>
 <script>
 'use strict';
 
@@ -181,6 +175,33 @@
 
 // Used for colouration of glyphs or clusters
 const glyphColors = ['#bb87e3','#bc6b0e','#57118c','#64902e','#91bbec','#d65e02','#1d5799','#984c11','#271909'];
+var textLineInfo = 'blah blah'; //null;
+var textLineFileName = '';
+
+//------------------------------
+// Drag and drop utilities
+//------------------------------
+function cancel(e) {e.stopPropagation();e.preventDefault();}
+function patchDragDrop(ele, foo) {
+  //const ele = document.getElementById(id);
+  ele.addEventListener('dragover', function(e) {
+    cancel(e);
+    ele.style.backgroundColor = 'yellow';
+    }, false);
+  ele.addEventListener('dragleave', function(e) {
+    cancel(e);
+    ele.style.backgroundColor = null;
+    }, false);
+  ele.addEventListener('drop', function(e) {
+    cancel(e);
+    const file = e.dataTransfer.files[0];
+    ele.style.backgroundColor = null;
+    foo(file, ele);
+  });
+}
+document.addEventListener('dragover', cancel, false);
+document.addEventListener('dragleave', cancel, false);
+document.addEventListener('drop', cancel, false);
 
 //----------------------------------
 // HarfBuzz SVG Class
@@ -196,7 +217,7 @@ class hbSvgClass {
   }
   freeFontBlob() {
     this.freeFont();
-    this.fileName = null;
+    this.fileDescription = null;
     delete(this.fontBlob);
   }
   freeFont() {
@@ -205,10 +226,16 @@ class hbSvgClass {
     if (this.face) { this.face.destroy(); delete(this.face); }
     if (this.blob) { this.blob.destroy(); delete(this.blob); }
   }
-  setFontBlob(fb, fileName) {
+  setFontBlob(fb) {
     this.freeFont();
-    this.fileName = fileName;
     this.fontBlob = fb;
+    if (fb) {
+      const fontName = FontName.parse(fb)[0];
+      console.log(fontName);
+      this.fileDescription = fontName.fullName + '</br>' + fontName.version;
+    } else {
+      this.fileDescription = '';
+    }
     if (!fb) return;
     this.blob = hb.createBlob(this.fontBlob);
     this.face = hb.createFace(this.blob, 0);
@@ -222,14 +249,11 @@ class hbSvgClass {
   }
   swapWith(other) {
     var b1 = this.fontBlob;
-    var f1 = this.fileName;
     var b2 = other.fontBlob;
-    var f2 = other.fileName;
-    this.setFontBlob(b2, f2);
-    other.setFontBlob(b1, f1);
+    this.setFontBlob(b2);
+    other.setFontBlob(b1);
   }
 }
-
 
 var hb;
 var hbsvg1 = new hbSvgClass();
@@ -258,19 +282,11 @@ function DownloadSvg() {
   URL.revokeObjectURL(tempLink.href);
 }
 
-function ToggleTextLines() {
-  if (textLinesDiv.hidden) {
-    textLinesDiv.hidden = false;
-    btnShowLines.innerText = "Hide Lines";
-    btnGotoLineFirst.hidden = false;
-    btnGotoLinePrev.hidden = false;
-    btnGotoLineNext.hidden = false;
-    btnGotoLineLast.hidden = false;
-  }
-  else {
-    textLinesDiv.hidden = true;
-    btnShowLines.innerText = "Show Lines";
-  }
+function hideTextButtons(dohide) {
+  btnGotoLineFirst.hidden = dohide;
+  btnGotoLinePrev.hidden = dohide;
+  btnGotoLineNext.hidden = dohide;
+  btnGotoLineLast.hidden = dohide;
 }
 
 var lineNo = 0;
@@ -283,6 +299,7 @@ function LoadLine() {
   while ((lineNo < mya.length) && !mya[lineNo]) lineNo++;
   if (mya[lineNo]) {
     text.value = mya[lineNo];
+    textLineInfo = '#'+(lineNo+1)+"/"+mya.length+ ' ('+textLineFileName+')';
     updateResult();
   }
 }
@@ -302,8 +319,8 @@ function gotoLineLast() {
   LoadLine();
 }
 
-function updateTextLines() {
-  mya = textLines.value.split(/\r?\n+/g);
+function updateTextLines(textLines) {
+  mya = textLines.split(/\r?\n+/g);
   mya = mya.flat();
 }
 
@@ -378,8 +395,8 @@ function updateResult() {
   } else {
     shapeResult.innerText = '';
   }
-  fileName1.innerText = hbsvg1.fileName || '';
-  fileName2.innerText = hbsvg2.fileName || '';
+  fontName1.innerHTML = hbsvg1.fileDescription || '';
+  fontName2.innerHTML = hbsvg2.fileDescription || '';
 
 
   // NOTE: Origin 0,0 is top left.
@@ -395,6 +412,9 @@ function updateResult() {
     +' height="'+heightOut+'"'
     +' viewBox="' + bbox + '"'
     +'>';
+  if (textLineInfo) {
+    ih += '<text font-size="120" x="0" y="1200" fill="green">'+textLineInfo+'</text>';
+  }
   ih += svgPath + '</svg>';
   svgResult.innerHTML = ih;
 
@@ -417,10 +437,9 @@ fetch(wasmUrl).then(function (x) {
     return res.arrayBuffer();
   }).then(function (blob) { // can be used without our wrapper
     window.fontBlob = new Uint8Array(blob);
-    hbsvg1.setFontBlob(window.fontBlob, fontname);
+    hbsvg1.setFontBlob(window.fontBlob);
     hbsvg2.freeFontBlob();
     updateResult();
-    //fontTwo.checked = true;
   });
 });
 
@@ -433,6 +452,7 @@ function UpdateListener(id, event) {
   }
 }
 
+/*
 document.addEventListener('dragover', function (e) {
   e.stopPropagation(); e.preventDefault();
 }, false);
@@ -444,22 +464,51 @@ document.addEventListener('drop', function (e) {
   //ef.value = e.dataTransfer.files[0];
   handleFontUpdate(e.dataTransfer.files[0]);
 });
+*/
 
-function handleFontUpdate(file) {
+
+function handleFontUpdate(file, which) {
   if (!file) return;
   var reader = new FileReader();
   reader.addEventListener("load", function () {
     window.fontBlob = new Uint8Array(reader.result);
-    if (fontOne.checked)
-      hbsvg1.setFontBlob(window.fontBlob, reader.fileName);
-    else
-      hbsvg2.setFontBlob(window.fontBlob, reader.fileName);
+    if (!which) {
+      if (fontOne.checked)
+        hbsvg1.setFontBlob(window.fontBlob);
+      else
+        hbsvg2.setFontBlob(window.fontBlob);
+    } else {
+      which.setFontBlob(window.fontBlob);
+    }
     updateResult();
   });
   var fdate = new Date(file.lastModified);
-  reader.fileName = file.webkitRelativePath + file.name  + ' ('+fdate.toDateString()+')';
-  reader.readAsArrayBuffer(file);  reader.readAsArrayBuffer(file);
+  reader.readAsArrayBuffer(file);
 }
+
+function handleTextDrop(file) {
+  if (!file) return;
+  const fileName = file.name.toLowerCase();
+  console.log(fileName);
+  textLineFileName = fileName;
+  if (!fileName.endsWith('.txt')) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    updateTextLines(reader.result);
+    hideTextButtons(false);
+    gotoLineFirst();
+  }
+  reader.readAsText(file);
+}
+
+function handleFontUpdate1(file) { handleFontUpdate(file, hbsvg1); }
+function handleFontUpdate2(file) { handleFontUpdate(file, hbsvg2); }
+
+patchDragDrop(document.getElementById('dropOne'), handleFontUpdate1);
+patchDragDrop(document.getElementById('dropName1'), handleFontUpdate1);
+patchDragDrop(document.getElementById('dropTwo'), handleFontUpdate2);
+patchDragDrop(document.getElementById('dropName2'), handleFontUpdate2);
+patchDragDrop(document.getElementById('textdrop'), handleTextDrop);
 
 // Operate on results of font.pathToJson(gid)
 function glyphToRelative(glyph, retxy) {
@@ -631,21 +680,15 @@ UpdateListener('colourCluster2', 'input');
 UpdateListener('colourSolid2', 'input');
 UpdateListener('solid2', 'input');
 UpdateListener('scale', 'input');
-UpdateListener('fontOne', 'input');
-UpdateListener('fontTwo', 'input');
 UpdateListener('showGids', 'input');
 UpdateListener('features', 'input');
 UpdateListener('baseLine', 'input');
 UpdateListener('exclusion', 'input');
-
-document.getElementById('textLines').addEventListener('input', function(e) {
-    updateTextLines();
-});
 
 </script>
 
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
-</br>Version: 2024-09-07</p>
+</br>Version: 2024-10-03</p>
 </html>

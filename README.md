@@ -9,14 +9,11 @@ https://mattmatic.github.io/hbfontcompare/
 
 # Usage
 
-- Drag and drop the font file onto the window
-- There are two radio buttons "#1" and "#2" that choose which font to load when dragging-and-dropping.
+- Drag and drop a font file onto the Font table cell (it will turn yellow)
     - The "Swap" button helps to toggle between fonts
-    - Note: it's not so easy to get the font name + version - but instead it shows the file date.
-- You can enter lines of words to quickly check a set of hundreds of words:
-	- Press "Show Lines"
-	- Copy and paste text lines into the box that appears.
-	- You can then click "Hide Lines" to make more space.
+    - Note: font name and version is shown
+- You can drag and drop a .txt file with lines of words to quickly check a set of hundreds of words:
+	- Drag and drop over the `Text:` table cell (it will turn yellow)
 	- Then use First/Prev/Next/Last to quickly scroll through all the test words for the font.
 		- Alt-1 / 2/ 3/ 4 are keyboard shortcuts
 - The Script/Language/Direction will auto guess if Script is blank.
@@ -50,4 +47,9 @@ To go deeper, Simon Cozen's excellent Crowbar gives more insight into the HarfBu
 https://www.corvelsoftware.co.uk/crowbar/
 
 And, of course, HarfBuzz - https://harfbuzz.github.io/
+
+# Library Links
+- https://github.com/danbovey/fontname
+- https://github.com/photopea/Typr.js/
+- https://minify-js.com/
 
