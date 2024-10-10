@@ -56,6 +56,12 @@
       <button id="btnGotoLineLast" onclick="gotoLineLast();" accesskey='4' hidden>Last (Alt-4)</button>
     </td>
   </tr>
+  <tr>
+    <td class='label'width="10%">Hex:</td>
+    <td colspan=2>
+      <input type="text" size="100" value="61 62 63" id="unicode">
+    </td>
+  </tr>
   <tr><td class='label' width="10%">Script/Lang/Dir:</td>
     <td colspan=2>
       <input type="text" value="" id="script">,
@@ -69,6 +75,7 @@
     <td>
       <input type="text" value="" id="features"> <font size=-1>e.g. '-liga,+jalt,+ss02'</font>
     </td></tr>
+
   <!--<tr><td>Font:</td><td><input type="text" value="" id="fontFile1"></td></tr>-->
   <tr><td class='label' >Font Drag & Drop:</td><td id='dropOne'>
       <button type="button" id="swapFonts" onclick="SwapFonts();">Swap #1 & #2</button>
@@ -300,7 +307,7 @@ function LoadLine() {
   if (mya[lineNo]) {
     text.value = mya[lineNo];
     textLineInfo = '#'+(lineNo+1)+"/"+mya.length+ ' ('+textLineFileName+')';
-    updateResult();
+    UpdateText();
   }
 }
 
@@ -443,11 +450,16 @@ fetch(wasmUrl).then(function (x) {
   });
 });
 
-function UpdateListener(id, event) {
+function UpdateListener(id, event, foo) {
   var e = document.getElementById(id);
-  if (e) {
+  if (e && !foo) {
     e.addEventListener(event, function(e) {
       updateResult();
+    });
+  } else
+  if (e) {
+    e.addEventListener(event, function(e) {
+      foo(e);
     });
   }
 }
@@ -657,8 +669,33 @@ function hbToSvg(obj, text, options)
   return svgPath;
 }
 
+function textToUnicode(str) {
+  return str.split('').map(function (value, index, array) {
+    var temp = value.charCodeAt(0).toString(16); //.toUpperCase();
+    return temp;
+  }).join(' ');
+}
+
+function unicodeToText(uni) {
+  return uni.split(' ').map(function(value, index, array) {
+    if (value.length == 0) return '';
+    return String.fromCharCode('0x'+value);
+  }).join('');
+}
+
+function UpdateUnicode(e) {
+  text.value = unicodeToText(unicode.value);
+  updateResult();
+}
+
+function UpdateText(e) {
+  unicode.value = textToUnicode(text.value);
+  updateResult();
+}
+
 // Glue update events...
-UpdateListener('text', 'keyup');
+UpdateListener('text', 'keyup', UpdateText);
+UpdateListener('unicode', 'keyup', UpdateUnicode);
 UpdateListener('script', 'keyup');
 UpdateListener('language', 'keyup');
 UpdateListener('dirLTR', 'input');
@@ -690,5 +727,5 @@ UpdateListener('exclusion', 'input');
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
-</br>Version: 2024-10-03</p>
+</br>Version: 2024-10-10</p>
 </html>
