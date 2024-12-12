@@ -170,6 +170,7 @@
 <p>Debug3:<div id="debugResult3"></div></p>
 --->
 
+<script type="text/javascript" src="hb.js"></script> <!-- Module - REQUIRED -->
 <script type="text/javascript" src="hbjs.js"></script> <!-- Wrapper, can be used without -->
 <script type="text/javascript" src="fontname.min.js"></script>
 <script>
@@ -428,18 +429,12 @@ function updateResult() {
   //debugResult.innerText = 'upem='+hbsvg1.face.upem;
 }
 
-// We could use instantiateStreaming but it's not supported in Safari yet
-// https://bugs.webkit.org/show_bug.cgi?id=173105
-var wasmUrl = 'hb.wasm';
-if (window.origin == 'null') wasmUrl = 'https://mattmatic.github.io/hbfontcompare/hb.wasm';
-
-fetch(wasmUrl).then(function (x) {
-  return x.arrayBuffer();
-}).then(function (wasm) {
-  return WebAssembly.instantiate(wasm);
-}).then(function (result) {
-  window.hb = hbjs(result.instance);
-  var fontname = 'https://mattmatic.github.io/hbfontcompare/samples/Gulzar-Regular-1.002.ttf';
+let harfBuzzModule; // not really needed with the hbjs wrapper
+createHarfBuzz().then(hbmodule=>{
+  harfBuzzModule = hbmodule;
+  window.hb = hbjs(hbmodule);
+  hbversion.innerHTML=hb.version_string()
+  var fontname = 'samples/Gulzar-Regular-1.002.ttf';
   fetch(fontname).then(function (res) {
     return res.arrayBuffer();
   }).then(function (blob) { // can be used without our wrapper
@@ -577,16 +572,19 @@ function hbToSvg(obj, text, options)
   buffer.addText(text);
 
   buffer.guessSegmentProperties();
+  if (options.direction && options.direction.length > 0) {
+    buffer.setDirection(options.direction || 'ltr');
+  }
   if (options.script && options.script.length > 0) {
     buffer.setScript(options.script || 'latn');
   }
   if (options.language && options.language.length > 0) {
     buffer.setLanguage(options.language);
   }
-  if (options.direction && options.direction.length > 0) {
-    buffer.setDirection(options.direction || 'ltr');
+  var featureString = '';
+  if (options.featureString && options.featureString.length > 0) {
+    var featureString = `+DUMY,${options.featureString},`; // Copied from Crowbar... "SERIOUSLY?"
   }
-  var featureString = `+DUMY,${options.featureString},`; // Copied from Crowbar... "SERIOUSLY?"
   hb.shapeWithTrace(font, buffer, featureString);
 
   var result = buffer.json(font);
@@ -727,5 +725,7 @@ UpdateListener('exclusion', 'input');
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
-</br>Version: 2024-10-10</p>
+</br>HarfBuzz Version: <span id="hbversion"></span>
+</br>Tool Version: 2024-12-12
+</p>
 </html>
