@@ -40,6 +40,44 @@
       font-family: 'Lucida Console';
       font-size: 80%;
     }
+    .tooltip {
+      position: relative;
+      display: inline-block;
+      border-bottom: 1px dotted #ccc;
+      color: #006080;
+    }
+    .tooltip .tooltiptext {
+      visibility: hidden;
+      position: absolute;
+      width: 340px;
+      background-color: #555;
+      color: #fff;
+      text-align: center;
+      padding: 5px 0;
+      border-radius: 6px;
+      z-index: 1;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .tooltip:hover .tooltiptext {
+      visibility: visible;
+      opacity: 1;
+    }
+    .tooltip-bottom {
+      top: 135%;
+      left: 50%;
+      margin-left: -60px;
+    }
+    .tooltip-bottom::after {
+      content: "";
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      margin-left: -5px;
+      margin-width: 5px;
+      border-style: solid;
+      border-color: transparent transparent #555 transparent;
+    }
   </style>
 </head>
 <meta charset="utf-8">
@@ -64,8 +102,12 @@
   </tr>
   <tr><td class='label' width="10%">Script/Lang/Dir:</td>
     <td colspan=2>
-      <input type="text" value="" id="script">,
-      <input type="text" value="" id="language">
+      <span class='tooltip'><input type="text" value="" id="script">
+        <span class='tooltiptext tooltip-bottom' id='scriptList'>-</span>
+      </span>,
+      <span class='tooltip'><input type="text" value="" id="language">
+        <span class='tooltiptext tooltip-bottom' id='languageList'>-</span>
+      </span>
       <input type="radio" id="dirLTR"   name="direction" value="LTR" checked>
         <label for="dirLTR">LTR</label>
       <input type="radio" id="dirRTL"   name="direction" value="RTL">
@@ -73,7 +115,11 @@
     </td></tr>
   <tr><td class='label' width="10%">Features:</td>
     <td>
-      <input type="text" value="" id="features"> <font size=-1>e.g. '-liga,+jalt,+ss02'</font>
+      <span class="tooltip">
+        <input type="text" value="" id="features">
+        <span id='featureList' class='tooltiptext tooltip-bottom'></span>
+      </span>
+      <font size=-1>e.g. '-liga,+jalt,+ss02'</font>
     </td></tr>
 
   <!--<tr><td>Font:</td><td><input type="text" value="" id="fontFile1"></td></tr>-->
@@ -172,7 +218,7 @@
 
 <script type="text/javascript" src="hb.js"></script> <!-- Module - REQUIRED -->
 <script type="text/javascript" src="hbjs.js"></script> <!-- Wrapper, can be used without -->
-<script type="text/javascript" src="fontname.min.js"></script>
+<script type="text/javascript" src="otinfo.js"></script>
 <script>
 'use strict';
 
@@ -237,8 +283,11 @@ class hbSvgClass {
   setFontBlob(fb) {
     this.freeFont();
     this.fontBlob = fb;
+    this.fontInfo = null;
     if (fb) {
-      const fontName = FontName.parse(fb)[0];
+      const otInfo = OTInfo.parse(fb);
+      this.fontInfo = otInfo[0];
+      const fontName = this.fontInfo.name;
       console.log(fontName);
       this.fileDescription = fontName.fullName + '</br>' + fontName.version;
     } else {
@@ -270,6 +319,7 @@ var hbsvg2 = new hbSvgClass();
 function SwapFonts() {
   hbsvg1.swapWith(hbsvg2);
   updateResult();
+  updateLists();
 }
 
 function ResetFontTwo() {
@@ -330,6 +380,42 @@ function gotoLineLast() {
 function updateTextLines(textLines) {
   mya = textLines.split(/\r?\n+/g);
   mya = mya.flat();
+}
+
+function iterateGtable(gtable, theKey, outputset) {
+  const scriptTable = gtable.scriptTable;
+  if (!scriptTable[theKey]) return;
+  for (const y of scriptTable[theKey]) {
+    outputset.add(y);
+  }
+}
+
+function updateLists() {
+  // Update script, language, and feature lists from this.fontInfo
+  const fontInfo = hbsvg1.fontInfo;
+  scriptList.innerText = '(empty)';
+  languageList.innerText = '(empty)';
+  featureList.innerHTML = '(empty)';
+  if (!fontInfo) {
+    return;
+  }
+  //console.log(fontInfo);
+  //console.log(fontInfo.scripts, fontInfo.languages, fontInfo.features);
+  if (fontInfo.scripts.size > 0) {
+    scriptList.innerText = '"'+[...fontInfo.scripts].join('", "')+'"';
+  }
+  var languages = fontInfo.languages;
+
+  if (script.value !== '') {
+    var theScript = script.value;
+    languages = new Set();
+    iterateGtable(fontInfo.GSUB, theScript, languages);
+    iterateGtable(fontInfo.GPOS, theScript, languages);
+  }
+  if (languages.size > 0) {
+    languageList.innerText = '"'+[...languages].join('", "')+'"';
+  }
+  featureList.innerHTML = [...fontInfo.features].join(", ");
 }
 
 function updateResult() {
@@ -442,6 +528,7 @@ createHarfBuzz().then(hbmodule=>{
     hbsvg1.setFontBlob(window.fontBlob);
     hbsvg2.freeFontBlob();
     updateResult();
+    updateLists();
   });
 });
 
@@ -450,6 +537,7 @@ function UpdateListener(id, event, foo) {
   if (e && !foo) {
     e.addEventListener(event, function(e) {
       updateResult();
+      updateLists();
     });
   } else
   if (e) {
@@ -488,6 +576,7 @@ function handleFontUpdate(file, which) {
       which.setFontBlob(window.fontBlob);
     }
     updateResult();
+    updateLists();
   });
   var fdate = new Date(file.lastModified);
   reader.readAsArrayBuffer(file);
@@ -726,6 +815,6 @@ UpdateListener('exclusion', 'input');
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2024-12-12
+</br>Tool Version: 2025-01-24
 </p>
 </html>
