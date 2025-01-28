@@ -218,7 +218,7 @@
 
 <script type="text/javascript" src="hb.js"></script> <!-- Module - REQUIRED -->
 <script type="text/javascript" src="hbjs.js"></script> <!-- Wrapper, can be used without -->
-<script type="text/javascript" src="otinfo.js"></script>
+<script type="text/javascript" src="otinfo.min.js"></script>
 <script>
 'use strict';
 
@@ -280,6 +280,26 @@ class hbSvgClass {
     if (this.face) { this.face.destroy(); delete(this.face); }
     if (this.blob) { this.blob.destroy(); delete(this.blob); }
   }
+  doGtable(t) {
+    for (const key in t.scriptTable) {
+      this.fontInfo.scripts.add(key);
+      for (const val of t.scriptTable[key]) {
+        this.fontInfo.languages.add(val);
+      }
+    }
+    if (t.featureListTable) {
+      for (const val of t.featureListTable) {
+        this.fontInfo.features.add(val);
+      }
+    }
+  }
+  fillTables() {
+    this.fontInfo.scripts = new Set();
+    this.fontInfo.languages = new Set();
+    this.fontInfo.features = new Set();
+    this.doGtable(this.fontInfo.GSUB);
+    this.doGtable(this.fontInfo.GPOS);
+  }
   setFontBlob(fb) {
     this.freeFont();
     this.fontBlob = fb;
@@ -290,6 +310,7 @@ class hbSvgClass {
       const fontName = this.fontInfo.name;
       console.log(fontName);
       this.fileDescription = fontName.fullName + '</br>' + fontName.version;
+      this.fillTables();
     } else {
       this.fileDescription = '';
     }
@@ -402,20 +423,22 @@ function updateLists() {
   //console.log(fontInfo);
   //console.log(fontInfo.scripts, fontInfo.languages, fontInfo.features);
   if (fontInfo.scripts.size > 0) {
-    scriptList.innerText = '"'+[...fontInfo.scripts].join('", "')+'"';
+    scriptList.innerText = '"'+[...fontInfo.scripts].sort().join('", "')+'"';
   }
   var languages = fontInfo.languages;
 
   if (script.value !== '') {
-    var theScript = script.value;
+    var theScript = script.value.toLowerCase();
     languages = new Set();
     iterateGtable(fontInfo.GSUB, theScript, languages);
     iterateGtable(fontInfo.GPOS, theScript, languages);
   }
   if (languages.size > 0) {
-    languageList.innerText = '"'+[...languages].join('", "')+'"';
+    languageList.innerText = '"'+[...languages].sort().join('", "')+'"';
   }
-  featureList.innerHTML = [...fontInfo.features].join(", ");
+  if (fontInfo.features.size > 0) {
+    featureList.innerHTML = [...fontInfo.features].sort().join(", ");
+  }
 }
 
 function updateResult() {
@@ -815,6 +838,6 @@ UpdateListener('exclusion', 'input');
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-01-24
+</br>Tool Version: 2025-01-28
 </p>
 </html>
