@@ -281,10 +281,13 @@ class hbSvgClass {
     if (this.blob) { this.blob.destroy(); delete(this.blob); }
   }
   doGtable(t) {
-    for (const key in t.scriptTable) {
-      this.fontInfo.scripts.add(key);
-      for (const val of t.scriptTable[key]) {
-        this.fontInfo.languages.add(val);
+    if (!t) return;
+    if (t.scriptTable) {
+      for (const key in t.scriptTable) {
+        this.fontInfo.scripts.add(key);
+        for (const val of t.scriptTable[key]) {
+          this.fontInfo.languages.add(val);
+        }
       }
     }
     if (t.featureListTable) {
@@ -838,6 +841,6 @@ UpdateListener('exclusion', 'input');
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-01-28
+</br>Tool Version: 2025-02-03
 </p>
 </html>
