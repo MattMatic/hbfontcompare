@@ -407,7 +407,9 @@ function updateTextLines(textLines) {
 }
 
 function iterateGtable(gtable, theKey, outputset) {
+  if (!gtable) return;
   const scriptTable = gtable.scriptTable;
+  if (!scriptTable) return;
   if (!scriptTable[theKey]) return;
   for (const y of scriptTable[theKey]) {
     outputset.add(y);
