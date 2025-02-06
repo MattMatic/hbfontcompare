@@ -462,7 +462,16 @@ function getHarfBuzzResult(hbsvg) {
 }
 
 function getTraceJSON(hbsvg) {
-  var txt = '[\r\n';
+  var txt = '';
+  txt += '{"font":"'+hbsvg.fileDescription+'",\r\n'+
+         ' "text":"'+text.value+'",\r\n'+
+         ' "script":"'+script.value+'",\r\n'+
+         ' "language":"'+language.value+'",\r\n'+
+         ' "features":"'+features.value+'",\r\n'+
+         ' "dir":"';
+  if (dirRTL.checked) txt += 'RTL'; else txt += 'LTR';
+  txt += '"},\r\n';
+  txt += '[\r\n';
   for (let o of hbsvg.trace) {
     txt += (" ".repeat(o.d || 0)) + JSON.stringify(o)+',\r\n';
   }
