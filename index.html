@@ -205,9 +205,14 @@
 <p><button id="saveSvg" onclick="DownloadSvg();">Download SVG</button>
 </td></tr>
 <tr>
+  <td class='label' width='10%'>HarfBuzz:</td>
+  <td width='45%'><div id='harfBuzzResult1'></div><button type="button" id="copyHB1" onclick="copyTraceToClipboard(hbsvg1);">Copy Trace #1</button></td>
+  <td width='45%'><div id='harfBuzzResult2'></div><button type="button" id="copyHB1" onclick="copyTraceToClipboard(hbsvg2);">Copy Trace #2</button></td>
+</tr>
+<tr>
   <td class='label' width="10%">Result:</td>
-  <td width="45%"><div id="shapeResult"></div></td>
-  <td width="45%"><div id="shapeResult2"></div></td>
+  <td width='45%'><div id='shapeResult1'></div></td>
+  <td width='45%'><div id='shapeResult2'></div></td>
 </tr>
 </table>
 <!--
@@ -446,6 +451,33 @@ function updateLists() {
   }
 }
 
+function getHarfBuzzResult(hbsvg) {
+  var txt = ''
+  if (hbsvg.trace.limits.maxGlyphAbort) txt += "<font color='red'>!GLYPH COUNT! "+hbsvg.trace.limits.maxGlyph+"</font></br>\r\n";
+  if (hbsvg.trace.limits.maxDepthAbort) txt += "<font color='red'>!GSUB/GPOS DEPTH!</font></br>\r\n" + txt;
+  if (hbsvg.trace && hbsvg.trace.limits) {
+    txt += 'GSUB/GPOS Depth: '+hbsvg.trace.limits.maxDepth + '</br>\r\n';
+  }
+  return txt;
+}
+
+function getTraceJSON(hbsvg) {
+  var txt = '[\r\n';
+  for (let o of hbsvg.trace) {
+    txt += (" ".repeat(o.d || 0)) + JSON.stringify(o)+',\r\n';
+  }
+  txt += ']';
+  return txt;
+}
+
+function copyTraceToClipboard(hbsvg) {
+  navigator.clipboard.writeText(getTraceJSON(hbsvg));
+}
+
+function getShapeResult(hbsvg) {
+  return formatJson(hbsvg.results.json || '');
+}
+
 function updateResult() {
   scaleLabel.innerText = scale.value;
 
@@ -507,15 +539,19 @@ function updateResult() {
 
   if (hbsvg2.fontBlob) {
     svgPath += hbsvg2.toSvg(text.value);
-    shapeResult2.innerText = formatJson(hbsvg2.results.json || '');
+    harfBuzzResult2.innerHTML = getHarfBuzzResult(hbsvg2);
+    shapeResult2.innerHTML = getShapeResult(hbsvg2);
   } else {
-    shapeResult2.innerText = '';
+    harfBuzzResult2.innerHTML = '';
+    shapeResult2.innerHTML = '';
   }
   if (hbsvg1.fontBlob) {
     svgPath += hbsvg1.toSvg(text.value);
-    shapeResult.innerText = formatJson(hbsvg1.results.json || '');
+    harfBuzzResult1.innerHTML = getHarfBuzzResult(hbsvg1);
+    shapeResult1.innerHTML = getShapeResult(hbsvg1);
   } else {
-    shapeResult.innerText = '';
+    harfBuzzResult1.innerHTML = '';
+    shapeResult1.innerHTML = '';
   }
   fontName1.innerHTML = hbsvg1.fileDescription || '';
   fontName2.innerHTML = hbsvg2.fileDescription || '';
@@ -702,7 +738,9 @@ function hbToSvg(obj, text, options)
   if (options.featureString && options.featureString.length > 0) {
     var featureString = `+DUMY,${options.featureString},`; // Copied from Crowbar... "SERIOUSLY?"
   }
-  hb.shapeWithTrace(font, buffer, featureString);
+  const limits = {maxGlyphRatio:100.0, maxDepth:100};
+
+  obj.trace = hb.shapeWithTraceLimits(font, buffer, featureString, null, null, limits);
 
   var result = buffer.json(font);
 
@@ -843,6 +881,6 @@ UpdateListener('exclusion', 'input');
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-02-03
+</br>Tool Version: 2025-02-06
 </p>
 </html>
