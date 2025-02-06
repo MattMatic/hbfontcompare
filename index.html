@@ -838,19 +838,22 @@ function textToUnicode(str) {
   }).join(' ');
 }
 
-function unicodeToText(uni) {
-  return uni.split(' ').map(function(value, index, array) {
+function unicodeToText(uni, maxLength) {
+  var txt = uni.split(' ').map(function(value, index, array) {
     if (value.length == 0) return '';
     return String.fromCharCode('0x'+value);
   }).join('');
+  if (maxLength) txt = txt.slice(0, maxLength); // Keep only 100 characters
+  return txt;
 }
 
 function UpdateUnicode(e) {
-  text.value = unicodeToText(unicode.value);
+  text.value = unicodeToText(unicode.value, 100);
   updateResult();
 }
 
 function UpdateText(e) {
+  text.value = text.value.slice(0, 100); // throw away silly amounts of text. Keep only 100 characters
   unicode.value = textToUnicode(text.value);
   updateResult();
 }
