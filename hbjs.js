@@ -533,6 +533,122 @@ function hbjs(Module) {
     return trace;
   }
 
+  /**
+  * Shape a buffer with a given font, returning a JSON trace of the shaping process.
+  *
+  * This function supports "partial shaping", where the shaping process is
+  * terminated after a given lookup ID is reached. If the user requests the function
+  * to terminate shaping after an ID in the GSUB phase, GPOS table lookups will be
+  * processed as normal.
+  *
+  * Like shapeWithTrace, but with depth and glyph count checks.
+  * To handle "Billion Laughs Attack" and circular GSUB errors more gracefully.
+  * Depth includes 'start...' to 'end...' traces and 'recursing...' to 'recursed...' traces
+  *
+  * @param {object} font: A font returned from `createFont`
+  * @param {object} buffer: A buffer returned from `createBuffer` and suitably
+  *   prepared.
+  * @param {object} features: A string of comma-separated OpenType features to apply.
+  * @param {number} stop_at: A lookup ID at which to terminate shaping.
+  * @param {number} stop_phase: Either 0 (don't terminate shaping), 1 (`stop_at`
+      refers to a lookup ID in the GSUB table), 2 (`stop_at` refers to a lookup
+      ID in the GPOS table).
+  * @param {object} limits: Definition of limits. `limits.maxGlyphRatio`, `limits.maxGlyph`, `limits.maxDepth`
+  * @return trace: includes `trace.limits.maxDepth`, `trace.limits.maxGlyph`, `trace.limits.maxDepthAbort`, `trace.limits.maxGlyphAbort`
+  */
+  function shapeWithTraceLimits(font, buffer, features, stop_at, stop_phase, limits) {
+    var trace = [];
+    trace.limits = {}
+    trace.limits.maxDepth = 0;
+    trace.limits.maxGlyph = 0;
+    var currentPhase = DONT_STOP;
+    var stopping = false;
+    var failure = false;
+    var depth = 0;
+    var depthStack = [];
+    var charCountOriginal = exports.hb_buffer_get_length(buffer.ptr);
+    var glyphCountMax = 0;
+    if (limits && limits.maxGlyphRatio) glyphCountMax = charCountOriginal * limits.maxGlyphRatio;
+    if (limits && limits.maxGlyph) glyphCountMax = limits.maxGlyph;
+
+    var traceBufLen = 1024 * 1024;
+    var traceBufPtr = exports.malloc(traceBufLen);
+
+    var traceFunc = function (bufferPtr, fontPtr, messagePtr, user_data) {
+      if (trace.limits.maxGlyphAbort || trace.limits.maxDepthAbort) return 0; // ABORT!
+      var thisDepth = depth;
+      var message = utf8Decoder.decode(heapu8.subarray(messagePtr, heapu8.indexOf(0, messagePtr)));
+      if (message.startsWith("start ") || message.startsWith("recursing ")) {
+        if (message.startsWith("start ")) {
+          depthStack.push(depth);
+        }
+        depth++;
+        if (depth > trace.limits.maxDepth) {
+          trace.limits.maxDepth = depth;
+        }
+        if (limits && limits.depth && (depth >= limits.depth)) {
+          trace.limits.maxDepthAbort = true;
+          return 0; // SKIP!
+        }
+      }
+      else if (message.startsWith("end ")) {
+        depth = depthStack.pop();
+      }
+      else if (message.startsWith("recursed ")) {
+        depth--;
+      }
+
+      if (message.startsWith("start table GSUB"))
+        currentPhase = GSUB_PHASE;
+      else if (message.startsWith("start table GPOS"))
+        currentPhase = GPOS_PHASE;
+
+      if (currentPhase != stop_phase)
+        stopping = false;
+
+      if (failure)
+        return 1;
+
+      if (stop_phase != DONT_STOP && currentPhase == stop_phase && message.startsWith("end lookup " + stop_at))
+        stopping = true;
+
+      if (stopping)
+        return 0;
+
+      exports.hb_buffer_serialize_glyphs(
+        bufferPtr,
+        0, exports.hb_buffer_get_length(bufferPtr),
+        traceBufPtr, traceBufLen, 0,
+        fontPtr,
+        HB_BUFFER_SERIALIZE_FORMAT_JSON,
+        HB_BUFFER_SERIALIZE_FLAG_NO_GLYPH_NAMES);
+
+      const blen = exports.hb_buffer_get_length(bufferPtr);
+      if (blen > trace.limits.maxGlyph) {
+        trace.limits.maxGlyph = blen;
+        if ((glyphCountMax > 0) && (blen >= glyphCountMax)) {
+          trace.limits.maxGlyphAbort = true;
+          return 0; // SKIP!
+        }
+      }
+      trace.push({
+        d: thisDepth,
+        m: message,
+        t: JSON.parse(utf8Decoder.decode(heapu8.subarray(traceBufPtr, heapu8.indexOf(0, traceBufPtr)))),
+        glyphs: exports.hb_buffer_get_content_type(bufferPtr) == HB_BUFFER_CONTENT_TYPE_GLYPHS,
+      });
+
+      return 1;
+    }
+
+    var traceFuncPtr = addFunction(traceFunc, 'iiiii');
+    exports.hb_buffer_set_message_func(buffer.ptr, traceFuncPtr, 0, 0);
+    shape(font, buffer, features, 0);
+    exports.free(traceBufPtr);
+
+    return trace;
+  }
+
   function version() {
     var versionPtr = exports.malloc(12);
     exports.hb_version(versionPtr, versionPtr + 4, versionPtr + 8);
@@ -558,6 +674,7 @@ function hbjs(Module) {
     createBuffer: createBuffer,
     shape: shape,
     shapeWithTrace: shapeWithTrace,
+    shapeWithTraceLimits : shapeWithTraceLimits,
     version: version,
     version_string: version_string,
   };
