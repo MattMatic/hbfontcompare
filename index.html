@@ -2,82 +2,92 @@
 <head>
   <title>HarfBuzz JS Font Compare Tool</title>
   <style>
-    body {
-      font-family: "Calibri";
-      background-color: #c0e0c0;
-    }
-    table, th, td {
-      border-collapse: collapse;
-      border: 2px solid #c0d0c0;
-      padding: 3px;
-    }
-    .label {
-      text-align: right;
-      font-weight: bold;
-    }
-    .svg {
-      background-color: #f0f8f0;
-      padding:6px;
-    }
-    input {
-      background-color: #d0e0d0;
-      accent-color: #608060;
-    }
-    input[type="range"] {
-      background-color: #d0e0d0;
-      accent-color: #586858;
-    }
-    button {
-      background-color: #c0d0c0;
-    }
-    #text {
-      font-size: 150%;
-    }
-    #script,#language {
-      font-family: 'Lucida Console';
-    }
-    #shapeResult,#shapeResult2 {
-      font-family: 'Lucida Console';
-      font-size: 80%;
-    }
-    .tooltip {
-      position: relative;
-      display: inline-block;
-      border-bottom: 1px dotted #ccc;
-      color: #006080;
-    }
-    .tooltip .tooltiptext {
-      visibility: hidden;
-      position: absolute;
-      width: 340px;
-      background-color: #555;
-      color: #fff;
-      text-align: center;
-      padding: 5px 0;
-      border-radius: 6px;
-      z-index: 1;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-    .tooltip:hover .tooltiptext {
-      visibility: visible;
-      opacity: 1;
-    }
-    .tooltip-bottom {
-      top: 135%;
-      left: 50%;
-      margin-left: -60px;
-    }
-    .tooltip-bottom::after {
-      content: "";
-      position: absolute;
-      bottom: 100%;
-      left: 50%;
-      margin-left: -5px;
-      margin-width: 5px;
-      border-style: solid;
-      border-color: transparent transparent #555 transparent;
-    }
+body {
+  font-family: "Calibri";
+  background-color: #c0e0c0;
+}
+table, th, td {
+  border-collapse: collapse;
+  border: 2px solid #c0d0c0;
+  padding: 3px;
+}
+.label {
+  text-align: right;
+  font-weight: bold;
+}
+.svg {
+  background-color: #f0f8f0;
+  padding:6px;
+}
+.codes {
+  font-family: 'Lucida Console';
+  font-size: 70%;
+}
+input {
+  background-color: #d0e0d0;
+  accent-color: #608060;
+}
+input[type="range"] {
+  background-color: #d0e0d0;
+  accent-color: #586858;
+}
+button {
+  background-color: #c0d0c0;
+}
+#text {
+  font-size: 150%;
+}
+#script,#language {
+  font-family: 'Lucida Console';
+}
+#shapeResult,#shapeResult2 {
+  font-family: 'Lucida Console';
+  font-size: 80%;
+}
+.tooltip {
+  position: relative;
+  display: inline-block;
+  border-bottom: 1px dotted #ccc;
+  color: #006080;
+}
+.tooltip .tooltiptext {
+  visibility: hidden;
+  position: absolute;
+  width: 340px;
+  background-color: #555;
+  color: #fff;
+  text-align: center;
+  padding: 5px 0;
+  border-radius: 6px;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+  opacity: 1;
+}
+.tooltip-bottom {
+  top: 135%;
+  left: 50%;
+  margin-left: -60px;
+}
+.tooltip-bottom::after {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  margin-left: -5px;
+  margin-width: 5px;
+  border-style: solid;
+  border-color: transparent transparent #555 transparent;
+}
+
+#scrubber {
+  width: 80%;
+  margin: 0;
+}
+
   </style>
 </head>
 <meta charset="utf-8">
@@ -205,6 +215,12 @@
 <p><button id="saveSvg" onclick="DownloadSvg();">Download SVG</button>
 </td></tr>
 <tr>
+  <td class='label'>Timeline:</td>
+  <td colspan=2>
+    <input type="range" id='scrubber' name='scrubber' min=0 max=242 value=0/><span id='scrubber_count'></span>
+    </br><span class='codes' id='scrubber_text'></span>
+</td></tr>
+<tr>
   <td class='label' width='10%'>HarfBuzz:</td>
   <td width='45%'><div id='harfBuzzResult1'></div><button type="button" id="copyHB1" onclick="copyTraceToClipboard(hbsvg1);">Copy Trace #1</button></td>
   <td width='45%'><div id='harfBuzzResult2'></div><button type="button" id="copyHB1" onclick="copyTraceToClipboard(hbsvg2);">Copy Trace #2</button></td>
@@ -330,8 +346,8 @@ class hbSvgClass {
   copyOptions(fromOptions) {
     this.options = structuredClone(fromOptions);
   }
-  toSvg(text) {
-    return window.hbToSvg(this, text, this.options);
+  toSvg(text, doTimeline, doUpdateScrubInfo) {
+    return window.hbToSvg(this, text, this.options, doTimeline, doUpdateScrubInfo);
   }
   swapWith(other) {
     var b1 = this.fontBlob;
@@ -468,7 +484,15 @@ function getTraceJSON(hbsvg) {
          ' "script":"'+script.value+'",\r\n'+
          ' "language":"'+language.value+'",\r\n'+
          ' "features":"'+features.value+'",\r\n'+
-         ' "dir":"';
+         ' "count":' + hbsvg.trace.count+',\r\n';
+  if (hbsvg.trace.gsub_point > 0)
+        txt += ' "gsub_start:":' + hbsvg.trace.gsub_point+',\r\n';
+  if (hbsvg.trace.gpos_point > 0)
+        txt += ' "gpos_start:":' + hbsvg.trace.gpos_point+',\r\n';
+  if (scrubber.value > 0) {
+    txt += ' "stop_at":'+scrubber.value+',\r\n';
+  }
+  txt += ' "dir":"';
   if (dirRTL.checked) txt += 'RTL'; else txt += 'LTR';
   txt += '"},\r\n';
   txt += '[\r\n';
@@ -547,7 +571,7 @@ function updateResult() {
   hbsvg1.options.stroke_width = strokeWidth.value;
 
   if (hbsvg2.fontBlob) {
-    svgPath += hbsvg2.toSvg(text.value);
+    svgPath += hbsvg2.toSvg(text.value, true, false);
     harfBuzzResult2.innerHTML = getHarfBuzzResult(hbsvg2);
     shapeResult2.innerHTML = getShapeResult(hbsvg2);
   } else {
@@ -555,7 +579,7 @@ function updateResult() {
     shapeResult2.innerHTML = '';
   }
   if (hbsvg1.fontBlob) {
-    svgPath += hbsvg1.toSvg(text.value);
+    svgPath += hbsvg1.toSvg(text.value, true, true);
     harfBuzzResult1.innerHTML = getHarfBuzzResult(hbsvg1);
     shapeResult1.innerHTML = getShapeResult(hbsvg1);
   } else {
@@ -680,11 +704,14 @@ patchDragDrop(document.getElementById('dropName2'), handleFontUpdate2);
 patchDragDrop(document.getElementById('textdrop'), handleTextDrop);
 
 // Operate on results of font.pathToJson(gid)
-function glyphToRelative(glyph, retxy) {
+// maxxy - gets filled with the maximum .x and .y of the glyph
+//         so can be used for advance in the GSUB stage (where there's no metrics yet available)
+function glyphToRelative(glyph, retxy, maxxy) {
   var r = [];
   var x = 0;
   var y = 0;
   var last_x, last_y;
+  var max = {x:0, y:0};
   var res = glyph.reduce( (acc,w) => {
     var v = {};
     v.type = w.type.toLowerCase();
@@ -701,6 +728,8 @@ function glyphToRelative(glyph, retxy) {
       });
     x = last_x;
     y = last_y;
+    if (x>max.x) max.x = x;
+    if (y>max.y) max.y = y;
     return acc.concat(v);
   }, []);
   // Go back to relative origin...
@@ -709,6 +738,10 @@ function glyphToRelative(glyph, retxy) {
     v.type = 'm';
     v.values = [-x, y];
     res.push(v);
+  }
+  if (maxxy) {
+    maxxy.x = max.x;
+    maxxy.y = max.y;
   }
   return res;
 }
@@ -721,18 +754,21 @@ function jsonToSvg(pathArray) {
   return res;
 }
 
-function hbToSvg(obj, text, options)
-{
-  obj = obj || {};
-  if (!("blob" in obj)) obj.blob = hb.createBlob(obj.fontBlob);
-  if (!("face" in obj)) obj.face = hb.createFace(obj.blob, 0);
-  if (!("font" in obj)) obj.font = hb.createFont(obj.face);
-  var font = obj.font;
-  if ("scale" in options)
-    font.setScale(options.scale, options.scale); // Optional, if not given will be in font upem
+function generateHtmlForTrace(trace, index) {
+  var i = index;
+  var html = '';
+  if (typeof trace === 'undefined') return html;
+  const message = trace[index].m;
+  if (index >= trace.gpos_point) html += 'GPOS ';
+  else if (index >= trace.gsub_point) html += 'GSUB ';
+  html += '#'+i+': ';
+  html += message;
+  return html;
+}
+
+function generateBuffer(text, options) {
   var buffer = hb.createBuffer();
   buffer.addText(text);
-
   buffer.guessSegmentProperties();
   if (options.direction && options.direction.length > 0) {
     buffer.setDirection(options.direction || 'ltr');
@@ -743,15 +779,109 @@ function hbToSvg(obj, text, options)
   if (options.language && options.language.length > 0) {
     buffer.setLanguage(options.language);
   }
+  return buffer;
+}
+
+function transferResult(result, trace_entry, hb_entry) {
+  var re = {};
+  re.g = trace_entry.g;
+  re.cl = trace_entry.cl;
+  if (typeof trace_entry.ax === 'undefined') {
+    re.ax = -1; // This is picked up later and we use the glyphs max.x to advance
+    re.ay = 0;
+    re.dx = 0;
+    re.dy = 0;
+    re.flags = 0;
+  } else {
+    re.ax = trace_entry.ax;
+    re.ay = trace_entry.ay;
+    re.dx = trace_entry.dx;
+    re.dy = trace_entry.dy;
+    re.flags = trace_entry.flags;
+  }
+  result.push(re);
+}
+
+function createResultArrayFromTrace(font, trace, hb_result) {
+  // NOTE: hb_result[0].cl shows us which direction we should generate
+  //       compared to the trace.cl
+  // NOTE: in the case of a GSUB sequence, we can take the ax,ay,dx,dy from the hb_result
+  //       to show meaningful info (that HarfBuzz has slightly cooked)
+  var result = [];
+  const tr = trace[trace.length - 1];
+  const t = tr.t;
+  if (typeof t === 'undefined') return result;
+  if (hb_result[0].cl == t[0].cl) {
+    // Same direction
+    var i = 0;
+    while (i < t.length) {
+      const te = t[i];
+      if (typeof te === 'undefined') break;
+      transferResult(result, te, hb_result[i]);
+      i++;
+    }
+  } else {
+    // Need to reverse
+    var i = t.length - 1;
+    var hi = 0;
+    while (i >= 0) {
+      const te = t[i];
+      transferResult(result, te, hb_result[hi]);
+      hi++;
+      i--;
+    }
+  }
+  return result;
+}
+
+function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
+{
+  obj = obj || {};
+  if (!("blob" in obj)) obj.blob = hb.createBlob(obj.fontBlob);
+  if (!("face" in obj)) obj.face = hb.createFace(obj.blob, 0);
+  if (!("font" in obj)) obj.font = hb.createFont(obj.face);
+  var font = obj.font;
+  if ("scale" in options)
+    font.setScale(options.scale, options.scale); // Optional, if not given will be in font upem
+
+  var buffer = generateBuffer(text, options);
   var featureString = '';
   if (options.featureString && options.featureString.length > 0) {
     var featureString = `+DUMY,${options.featureString},`; // Copied from Crowbar... "SERIOUSLY?"
   }
   const limits = {maxGlyphRatio:100.0, maxDepth:100};
 
-  obj.trace = hb.shapeWithTraceLimits(font, buffer, featureString, null, null, limits);
+  obj.trace = hb.shapeWithTraceLimits(font, buffer, featureString, null, null, limits, null);
 
-  var result = buffer.json(font);
+  var result;
+  if (doTimeline) {
+    var stop_count = null;
+    scrubber_count.innerText = obj.trace.count;
+    if (scrubber.value > 0) stop_count = scrubber.value;
+    var buffer_trace = generateBuffer(text, options);
+    obj.trace_part = hb.shapeWithTraceLimits(font, buffer_trace, featureString, null, null, limits, stop_count);
+    if (stop_count > 0)
+      result = createResultArrayFromTrace(font, obj.trace_part, buffer_trace.json(font));
+    else
+      result = buffer_trace.json(font);
+
+    buffer_trace.destroy();
+    if (doUpdateScrubInfo) {
+      if (!stop_count) {
+        // Update the scrubber limits as we have a 'full' shaping count info
+        scrubber.max = obj.trace.count;
+        scrubber_text.innerText =
+          ' GSUB:'+obj.trace.gsub_point +
+          ' GPOS:'+obj.trace.gpos_point +
+          ' Total:'+obj.trace.count;
+      } else {
+        var idx = stop_count - 1; //obj.trace.length - 1;
+        scrubber_text.innerHTML = generateHtmlForTrace(obj.trace, idx);
+      }
+    }
+  } else {
+    result = buffer.json(font);
+  }
 
   // returns glyphs paths, totally optional
   var glyphs = {};
@@ -801,6 +931,7 @@ function hbToSvg(obj, text, options)
       colourText = colourStroke;
     }
     var blendMode = options.blendMode || 'normal';
+    var max = {x:0, y:0};
     var path =
         '<path style="fill:'
           +colourGlyph
@@ -810,8 +941,13 @@ function hbToSvg(obj, text, options)
           +'; mix-blend-mode: '+blendMode+'" '
         +'d="M'+x+' '+y+' '         // The absolute origin
         +'m'+r.dx+' '+(-r.dy)+' '   // negative y because the SVG coordinates are upside down
-         +jsonToSvg(glyphToRelative(glyphs[r.g], false))
+         +jsonToSvg(glyphToRelative(glyphs[r.g], false, max))
         +'"/>\r\n';
+    if (r.ax < 0) {
+      // for GSUB phase where there's no advance
+      // (r.ax will be set to -1 in `transferResult``)
+      r.ax = max.x * 1.00;
+    }
     if (options.showGids) {
       var xOfs = 0; //r.dx
       var fontSize = 100 * options.scale / 1000;
@@ -847,24 +983,40 @@ function unicodeToText(uni, maxLength) {
   return txt;
 }
 
+function resetScrubber() {
+  scrubber.value = 0;
+}
+
 function UpdateUnicode(e) {
   text.value = unicodeToText(unicode.value, 100);
+  resetScrubber();
   updateResult();
 }
 
 function UpdateText(e) {
+  resetScrubber();
   text.value = text.value.slice(0, 100); // throw away silly amounts of text. Keep only 100 characters
   unicode.value = textToUnicode(text.value);
   updateResult();
 }
 
+function UpdateScrubber(e) {
+  updateResult();
+}
+
+function UpdateWithTimeline(e) {
+  updateResult();
+  updateLists();
+  resetScrubber();
+}
+
 // Glue update events...
 UpdateListener('text', 'keyup', UpdateText);
 UpdateListener('unicode', 'keyup', UpdateUnicode);
-UpdateListener('script', 'keyup');
-UpdateListener('language', 'keyup');
-UpdateListener('dirLTR', 'input');
-UpdateListener('dirRTL', 'input');
+UpdateListener('script', 'keyup', UpdateWithTimeline);
+UpdateListener('language', 'keyup', UpdateWithTimeline);
+UpdateListener('dirLTR', 'input', UpdateWithTimeline);
+UpdateListener('dirRTL', 'input', UpdateWithTimeline);
 UpdateListener('stretch', 'input');
 UpdateListener('offset2', 'input');
 UpdateListener('opacityFill', 'input');
@@ -883,9 +1035,11 @@ UpdateListener('colourSolid2', 'input');
 UpdateListener('solid2', 'input');
 UpdateListener('scale', 'input');
 UpdateListener('showGids', 'input');
-UpdateListener('features', 'input');
+UpdateListener('features', 'input', UpdateWithTimeline);
 UpdateListener('baseLine', 'input');
 UpdateListener('exclusion', 'input');
+UpdateListener('scrubber', 'input', UpdateScrubber);
+resetScrubber();
 
 </script>
 
@@ -893,6 +1047,6 @@ UpdateListener('exclusion', 'input');
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-02-06
+</br>Tool Version: 2025-02-27
 </p>
 </html>
