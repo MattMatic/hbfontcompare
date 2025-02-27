@@ -556,7 +556,7 @@ function hbjs(Module) {
   * @param {object} limits: Definition of limits. `limits.maxGlyphRatio`, `limits.maxGlyph`, `limits.maxDepth`
   * @return trace: includes `trace.limits.maxDepth`, `trace.limits.maxGlyph`, `trace.limits.maxDepthAbort`, `trace.limits.maxGlyphAbort`
   */
-  function shapeWithTraceLimits(font, buffer, features, stop_at, stop_phase, limits) {
+  function shapeWithTraceLimits(font, buffer, features, stop_at, stop_phase, limits, stop_count) {
     var trace = [];
     trace.limits = {}
     trace.limits.maxDepth = 0;
@@ -566,6 +566,9 @@ function hbjs(Module) {
     var failure = false;
     var depth = 0;
     var depthStack = [];
+    var trace_count = 0;
+    var gsub_point = -1;
+    var gpos_point = -1;
     var charCountOriginal = exports.hb_buffer_get_length(buffer.ptr);
     var glyphCountMax = 0;
     if (limits && limits.maxGlyphRatio) glyphCountMax = charCountOriginal * limits.maxGlyphRatio;
@@ -576,6 +579,10 @@ function hbjs(Module) {
 
     var traceFunc = function (bufferPtr, fontPtr, messagePtr, user_data) {
       if (trace.limits.maxGlyphAbort || trace.limits.maxDepthAbort) return 0; // ABORT!
+      trace_count++;
+      if (stop_count && (trace_count > stop_count))
+        return 0;
+
       var thisDepth = depth;
       var message = utf8Decoder.decode(heapu8.subarray(messagePtr, heapu8.indexOf(0, messagePtr)));
       if (message.startsWith("start ") || message.startsWith("recursing ")) {
@@ -598,16 +605,23 @@ function hbjs(Module) {
         depth--;
       }
 
-      if (message.startsWith("start table GSUB"))
+      if (message.startsWith("start table GSUB")) {
         currentPhase = GSUB_PHASE;
-      else if (message.startsWith("start table GPOS"))
+        gsub_point = trace_count-1;
+      }
+      else if (message.startsWith("start table GPOS")) {
         currentPhase = GPOS_PHASE;
+        gpos_point = trace_count-1;
+      }
 
       if (currentPhase != stop_phase)
         stopping = false;
 
       if (failure)
         return 1;
+
+      if (stop_count && (trace_count > stop_count))
+        stopping = true;
 
       if (stop_phase != DONT_STOP && currentPhase == stop_phase && message.startsWith("end lookup " + stop_at))
         stopping = true;
@@ -645,7 +659,9 @@ function hbjs(Module) {
     exports.hb_buffer_set_message_func(buffer.ptr, traceFuncPtr, 0, 0);
     shape(font, buffer, features, 0);
     exports.free(traceBufPtr);
-
+    trace.count = trace_count;
+    trace.gsub_point = gsub_point;
+    trace.gpos_point = gpos_point;
     return trace;
   }
 
