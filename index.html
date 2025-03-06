@@ -202,6 +202,8 @@ button {
     <td>
       <input type="checkbox" id="showGids"><label for="showGids">GIDs</label>
       <input type="checkbox" id="baseLine"><label for="baseLine">Baseline</label>
+      <input type="checkbox" id="showBoundingBox"><label for="showBoundingBox">Bounding Box</label>
+      <input type="checkbox" id="showOrigin"><label for="showOrigin">Origins</label>
       <!--<input type="checkbox" id="exclusion"><label for="exclusion">Exclusion</label>-->
       <!--<input type="checkbox" id="showBbox"><label for="showBbox">Bounds</label>-->
     </td>
@@ -706,12 +708,12 @@ patchDragDrop(document.getElementById('textdrop'), handleTextDrop);
 // Operate on results of font.pathToJson(gid)
 // maxxy - gets filled with the maximum .x and .y of the glyph
 //         so can be used for advance in the GSUB stage (where there's no metrics yet available)
-function glyphToRelative(glyph, retxy, maxxy) {
+function glyphToRelative(glyph, retxy, extxy) {
   var r = [];
   var x = 0;
   var y = 0;
   var last_x, last_y;
-  var max = {x:0, y:0};
+  var ext = {xl:null, yl:null, xh:null, yh:null};
   var res = glyph.reduce( (acc,w) => {
     var v = {};
     v.type = w.type.toLowerCase();
@@ -728,8 +730,10 @@ function glyphToRelative(glyph, retxy, maxxy) {
       });
     x = last_x;
     y = last_y;
-    if (x>max.x) max.x = x;
-    if (y>max.y) max.y = y;
+    if ((ext.xh === null) || (x>ext.xh)) ext.xh = x;
+    if ((ext.yh === null) || (y>ext.yh)) ext.yh = y;
+    if ((ext.xl === null) || (x<ext.xl)) ext.xl = x;
+    if ((ext.yl === null) || (y<ext.yl)) ext.yl = y;
     return acc.concat(v);
   }, []);
   // Go back to relative origin...
@@ -739,9 +743,17 @@ function glyphToRelative(glyph, retxy, maxxy) {
     v.values = [-x, y];
     res.push(v);
   }
-  if (maxxy) {
-    maxxy.x = max.x;
-    maxxy.y = max.y;
+  if (extxy) {
+    extxy.xh = ext.xh;
+    extxy.yh = ext.yh;
+    extxy.xl = ext.xl;
+    extxy.yl = ext.yl;
+    if (extxy.xh === null) extxy.xh = 0;
+    if (extxy.yh === null) extxy.yh = 0;
+    if (extxy.xl === null) extxy.xl = 0;
+    if (extxy.yl === null) extxy.yl = 0;
+    extxy.w = (ext.xh - ext.xl)
+    extxy.h = (ext.yh - ext.yl)
   }
   return res;
 }
@@ -841,6 +853,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
   if (!("face" in obj)) obj.face = hb.createFace(obj.blob, 0);
   if (!("font" in obj)) obj.font = hb.createFont(obj.face);
   var font = obj.font;
+  const primary = doUpdateScrubInfo; //(obj == hbsvg1);
   if ("scale" in options)
     font.setScale(options.scale, options.scale); // Optional, if not given will be in font upem
 
@@ -866,7 +879,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
       result = buffer_trace.json(font);
 
     buffer_trace.destroy();
-    if (doUpdateScrubInfo) {
+    if (primary) {
       if (!stop_count) {
         // Update the scrubber limits as we have a 'full' shaping count info
         scrubber.max = obj.trace.count;
@@ -911,6 +924,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
     var colourGlyph = colour_solid;
     var colourStroke = colour_solid;
     var colourText = colour_solid;
+    var colourExtents = colour_solid;
     if (!colour_mode == 0)
     {
       if (colour_mode == 1) {
@@ -922,17 +936,43 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
         }
       }
       cluster_n = r.cl;
-      colourGlyph = glyphColors[colour_i%glyphColors.length];
-      colourStroke = colour_solid;
-      colourText = colourGlyph;
+      colourGlyph   = glyphColors[colour_i%glyphColors.length];
+      colourStroke  = colour_solid;
+      colourText    = colourGlyph;
+      colourExtents = colourGlyph;
     } else {
       colour_i++;
-      colourStroke = glyphColors[colour_i%glyphColors.length];
-      colourText = colourStroke;
+      colourStroke  = glyphColors[colour_i%glyphColors.length];
+      colourText    = colourStroke;
+      colourExtents = colourStroke;
     }
     var blendMode = options.blendMode || 'normal';
-    var max = {x:0, y:0};
-    var path =
+    var ext = {};
+    const glyphSvg = jsonToSvg(glyphToRelative(glyphs[r.g], false, ext));
+    if (r.ax < 0) {
+      // for GSUB phase where there's no advance
+      // (r.ax will be set to -1 in `transferResult`)
+      if (ext.w <= 1) ext.w = (obj.face.upem / 6);
+      if (ext.xl < 0) r.dx = -ext.xl
+      if (ext.xh > ext.w) r.ax = ext.xh; else r.ax = ext.w;
+    }
+    var path = '';
+    if (showBoundingBox.checked && primary) {
+      path += '<rect style="fill:'+colourExtents
+           +';fill-opacity:0.15;mix-blend-mode:"multiply" '
+           +'width="'+(ext.w)+'"'
+           +'height="'+(ext.h)+'"'
+           +'x="'+(x+r.dx+ext.xl)+'" y="'+(y-r.dy-ext.yh)+'"'
+           +'/>'
+    }
+    if (showOrigin.checked && primary) {
+      path += '<circle r="'+(20* options.scale / 1000)+'"'
+           +'style="fill-opacity:0.5;" '
+           +'cx="'+(x+r.dx)+'" '
+           +'cy="'+(y-r.dy)+'" '
+           +'fill="'+colourExtents+'" />'
+    }
+    path +=
         '<path style="fill:'
           +colourGlyph
           +';stroke:'+colourStroke
@@ -941,13 +981,8 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
           +'; mix-blend-mode: '+blendMode+'" '
         +'d="M'+x+' '+y+' '         // The absolute origin
         +'m'+r.dx+' '+(-r.dy)+' '   // negative y because the SVG coordinates are upside down
-         +jsonToSvg(glyphToRelative(glyphs[r.g], false, max))
+        +glyphSvg
         +'"/>\r\n';
-    if (r.ax < 0) {
-      // for GSUB phase where there's no advance
-      // (r.ax will be set to -1 in `transferResult``)
-      r.ax = max.x * 1.00;
-    }
     if (options.showGids) {
       var xOfs = 0; //r.dx
       var fontSize = 100 * options.scale / 1000;
@@ -1037,6 +1072,8 @@ UpdateListener('scale', 'input');
 UpdateListener('showGids', 'input');
 UpdateListener('features', 'input', UpdateWithTimeline);
 UpdateListener('baseLine', 'input');
+UpdateListener('showBoundingBox', 'input');
+UpdateListener('showOrigin', 'input');
 UpdateListener('exclusion', 'input');
 UpdateListener('scrubber', 'input', UpdateScrubber);
 resetScrubber();
@@ -1047,6 +1084,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-02-27
+</br>Tool Version: 2025-03-06
 </p>
 </html>
