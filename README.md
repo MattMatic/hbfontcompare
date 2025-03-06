@@ -52,6 +52,8 @@ Each HarfBuzz debug output is displayed beneath the timeline - including the pha
 
 During the GSUB phase, the glyphs are shown strictly side-by-side (since there is no HarfBuzz positioning information yet). If a glyph has a zero-width, the JS code will advance one-sixth of the em-width. This is also helpful for complex tables, such as for Noto Nastaliq Urdu, where surrogate glyphs are used in the initial stages.
 
+The glyphs that are affected in a debug step are highlighted.
+
 Note: The "Results" output shows `ax`, `ay`, `dx`, and `dy` for the JavaScript logic defined dimensions (HarfBuzz outputs them all as zero in this phase).
 
 Once the GPOS phase starts, the position and advance metrics are available and the glyphs are shown appropriately.
