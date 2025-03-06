@@ -33,6 +33,8 @@ https://mattmatic.github.io/hbfontcompare/
 - Options
 	- GIDs shows the glyph IDs underneath the glyphs
 	- Baseline shows the baseline and x-origin
+	- Bounding Box shows a shaded rectangle for the extents of each glyph
+	- Origins places a small dot on the origin of each glyph
 - The "Result" at the bottom is the JSON output from HarfBuzz
 	- g = glyphID
 	- cl = cluster
@@ -40,6 +42,22 @@ https://mattmatic.github.io/hbfontcompare/
 	- dx & dy = delta x&y
 	- flags
 - The "Download SVG" button saves the SVG file so you can share!
+
+
+## Stepping through GSUB/GPOS
+The "Timeline" 'scrubber' can let you walk through the GSUB and GPOS table rules to debug rules.
+When the slider is fully at the left, the final output is shown (this is the default).
+
+Each HarfBuzz debug output is displayed beneath the timeline - including the phase (GSUB/GPOS), the index, and the text.
+
+During the GSUB phase, the glyphs are shown strictly side-by-side (since there is no HarfBuzz positioning information yet). If a glyph has a zero-width, the JS code will advance one-sixth of the em-width. This is also helpful for complex tables, such as for Noto Nastaliq Urdu, where surrogate glyphs are used in the initial stages.
+
+Note: The "Results" output shows `ax`, `ay`, `dx`, and `dy` for the JavaScript logic defined dimensions (HarfBuzz outputs them all as zero in this phase).
+
+Once the GPOS phase starts, the position and advance metrics are available and the glyphs are shown appropriately.
+
+Using the "Copy Trace #1" button will put the complete HarfBuzz debug output on the clipboard.
+The JS code indents each line to help identify the levels of each GSUB/GPOS call.
 
 
 # Other useful tools
