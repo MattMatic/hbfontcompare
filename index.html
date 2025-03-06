@@ -811,6 +811,7 @@ function transferResult(result, trace_entry, hb_entry) {
     re.dy = trace_entry.dy;
     re.flags = trace_entry.flags;
   }
+  re.H = trace_entry.H
   result.push(re);
 }
 
@@ -823,6 +824,23 @@ function createResultArrayFromTrace(font, trace, hb_result) {
   const tr = trace[trace.length - 1];
   const t = tr.t;
   if (typeof t === 'undefined') return result;
+
+  // Scan for ' at ...' in the tr.m field
+  var sets = tr.m.match(/ at [\d,]+/g);
+  if (sets !== null) {
+    var i = 0;
+    while (i < sets.length) {
+      const indices = sets[i].match(/\d+/g);
+      var j = 0;
+      while (j < indices.length) {
+        const n = parseInt(indices[j], 10);
+        t[n].H = i+1;
+        j++;
+      }
+      i++;
+    }
+  }
+
   if (hb_result[0].cl == t[0].cl) {
     // Same direction
     var i = 0;
@@ -960,6 +978,23 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
     if (showBoundingBox.checked && primary) {
       path += '<rect style="fill:'+colourExtents
            +';fill-opacity:0.15;mix-blend-mode:"multiply" '
+           +'width="'+(ext.w)+'"'
+           +'height="'+(ext.h)+'"'
+           +'x="'+(x+r.dx+ext.xl)+'" y="'+(y-r.dy-ext.yh)+'"'
+           +'/>'
+    }
+    if (r.H) {
+      var highlight_fill, highlight_stroke;
+      if (r.H == 1) {
+        highlight_fill   = '#ffff00';
+        highlight_stroke = '#ff0000';
+      }
+      else {
+        highlight_fill   = '#ffff00';
+        highlight_stroke = '#80c000';
+      }
+      path += '<rect style="fill:'+highlight_fill+';fill-opacity:0.6;mix-blend-mode:normal;'
+              +'stroke-opacity:0.5;stroke-width:20;stroke:'+highlight_stroke+'"'
            +'width="'+(ext.w)+'"'
            +'height="'+(ext.h)+'"'
            +'x="'+(x+r.dx+ext.xl)+'" y="'+(y-r.dy-ext.yh)+'"'
