@@ -8,7 +8,6 @@ function hbjs(Module) {
   var heapf32 = Module.HEAPF32;
   var utf8Decoder = new TextDecoder("utf8");
   let addFunction = Module.addFunction;
-  let removeFunction = Module.removeFunction;
 
   var freeFuncPtr = addFunction(function (ptr) { exports.free(ptr); }, 'vi');
 
