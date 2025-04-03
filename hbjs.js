@@ -8,6 +8,7 @@ function hbjs(Module) {
   var heapf32 = Module.HEAPF32;
   var utf8Decoder = new TextDecoder("utf8");
   let addFunction = Module.addFunction;
+  let removeFunction = Module.removeFunction;
 
   var freeFuncPtr = addFunction(function (ptr) { exports.free(ptr); }, 'vi');
 
@@ -480,55 +481,69 @@ function hbjs(Module) {
       refers to a lookup ID in the GSUB table), 2 (`stop_at` refers to a lookup
       ID in the GPOS table).
   */
+  var temp = []; // Temporary
+  var shapeWithTraceFuncPtr = null;
+
+  function shapeWithTraceFunc(bufferPtr, fontPtr, messagePtr, user_data) {
+    var trace = temp.trace;
+    var message = utf8Decoder.decode(heapu8.subarray(messagePtr, heapu8.indexOf(0, messagePtr)));
+    if (message.startsWith("start table GSUB"))
+      temp.currentPhase = GSUB_PHASE;
+    else if (message.startsWith("start table GPOS"))
+      temp.currentPhase = GPOS_PHASE;
+
+    if (temp.currentPhase != temp.stop_phase)
+      temp.stopping = false;
+
+    if (temp.failure)
+      return 1;
+
+    if (temp.stop_phase != DONT_STOP && temp.currentPhase == temp.stop_phase && message.startsWith("end lookup " + temp.stop_at))
+      temp.stopping = true;
+
+    if (temp.stopping)
+      return 0;
+
+    exports.hb_buffer_serialize_glyphs(
+      bufferPtr,
+      0, exports.hb_buffer_get_length(bufferPtr),
+      temp.traceBufPtr, temp.traceBufLen, 0,
+      fontPtr,
+      HB_BUFFER_SERIALIZE_FORMAT_JSON,
+      HB_BUFFER_SERIALIZE_FLAG_NO_GLYPH_NAMES);
+
+    trace.push({
+      m: message,
+      t: JSON.parse(utf8Decoder.decode(heapu8.subarray(temp.traceBufPtr, heapu8.indexOf(0, temp.traceBufPtr)))),
+      glyphs: exports.hb_buffer_get_content_type(bufferPtr) == HB_BUFFER_CONTENT_TYPE_GLYPHS,
+    });
+
+    return 1;
+  }
+
   function shapeWithTrace(font, buffer, features, stop_at, stop_phase) {
     var trace = [];
-    var currentPhase = DONT_STOP;
-    var stopping = false;
-    var failure = false;
 
-    var traceBufLen = 1024 * 1024;
-    var traceBufPtr = exports.malloc(traceBufLen);
+    temptrace_t = [];
+    temp.trace = trace;
+    temp.currentPhase = DONT_STOP;
+    temp.stopping = false;
+    temp.failure = false;
+    temp.stop_at = stop_at;
+    tmpe.stop_phase = stop_phase;
 
-    var traceFunc = function (bufferPtr, fontPtr, messagePtr, user_data) {
-      var message = utf8Decoder.decode(heapu8.subarray(messagePtr, heapu8.indexOf(0, messagePtr)));
-      if (message.startsWith("start table GSUB"))
-        currentPhase = GSUB_PHASE;
-      else if (message.startsWith("start table GPOS"))
-        currentPhase = GPOS_PHASE;
+    temp.traceBufLen = 1024 * 1024;
+    temp.traceBufPtr = exports.malloc(temp.traceBufLen);
 
-      if (currentPhase != stop_phase)
-        stopping = false;
-
-      if (failure)
-        return 1;
-
-      if (stop_phase != DONT_STOP && currentPhase == stop_phase && message.startsWith("end lookup " + stop_at))
-        stopping = true;
-
-      if (stopping)
-        return 0;
-
-      exports.hb_buffer_serialize_glyphs(
-        bufferPtr,
-        0, exports.hb_buffer_get_length(bufferPtr),
-        traceBufPtr, traceBufLen, 0,
-        fontPtr,
-        HB_BUFFER_SERIALIZE_FORMAT_JSON,
-        HB_BUFFER_SERIALIZE_FLAG_NO_GLYPH_NAMES);
-
-      trace.push({
-        m: message,
-        t: JSON.parse(utf8Decoder.decode(heapu8.subarray(traceBufPtr, heapu8.indexOf(0, traceBufPtr)))),
-        glyphs: exports.hb_buffer_get_content_type(bufferPtr) == HB_BUFFER_CONTENT_TYPE_GLYPHS,
-      });
-
-      return 1;
+    if (!shapeWithTraceFuncPtr) {
+      shapeWithTraceFuncPtr = addFunction(shapeWithTraceFunc, 'iiiii');
     }
 
-    var traceFuncPtr = addFunction(traceFunc, 'iiiii');
-    exports.hb_buffer_set_message_func(buffer.ptr, traceFuncPtr, 0, 0);
+    exports.hb_buffer_set_message_func(buffer.ptr, shapeWithTraceFuncPtr, 0, 0);
     shape(font, buffer, features, 0);
-    exports.free(traceBufPtr);
+    exports.hb_buffer_set_message_func(0, 0, 0, 0);
+    exports.free(temp.traceBufPtr);
+    temp = [];
 
     return trace;
   }
@@ -556,112 +571,128 @@ function hbjs(Module) {
   * @param {object} limits: Definition of limits. `limits.maxGlyphRatio`, `limits.maxGlyph`, `limits.maxDepth`
   * @return trace: includes `trace.limits.maxDepth`, `trace.limits.maxGlyph`, `trace.limits.maxDepthAbort`, `trace.limits.maxGlyphAbort`
   */
-  function shapeWithTraceLimits(font, buffer, features, stop_at, stop_phase, limits, stop_count) {
-    var trace = [];
-    trace.limits = {}
-    trace.limits.maxDepth = 0;
-    trace.limits.maxGlyph = 0;
-    var currentPhase = DONT_STOP;
-    var stopping = false;
-    var failure = false;
-    var depth = 0;
-    var depthStack = [];
-    var trace_count = 0;
-    var gsub_point = -1;
-    var gpos_point = -1;
-    var charCountOriginal = exports.hb_buffer_get_length(buffer.ptr);
-    var glyphCountMax = 0;
-    if (limits && limits.maxGlyphRatio) glyphCountMax = charCountOriginal * limits.maxGlyphRatio;
-    if (limits && limits.maxGlyph) glyphCountMax = limits.maxGlyph;
+  var shapeWithTraceLimitsFuncPtr = null;
+  function shapeWithTraceLimitsFunc(bufferPtr, fontPtr, messagePtr, user_data) {
+    var trace = temp.trace;
+    if (trace.limits.maxGlyphAbort || trace.limits.maxDepthAbort) return 0; // ABORT!
+    temp.trace_count++;
+    if (temp.stop_count && (temp.trace_count > temp.stop_count))
+      return 0;
 
-    var traceBufLen = 1024 * 1024;
-    var traceBufPtr = exports.malloc(traceBufLen);
-
-    var traceFunc = function (bufferPtr, fontPtr, messagePtr, user_data) {
-      if (trace.limits.maxGlyphAbort || trace.limits.maxDepthAbort) return 0; // ABORT!
-      trace_count++;
-      if (stop_count && (trace_count > stop_count))
-        return 0;
-
-      var thisDepth = depth;
-      var message = utf8Decoder.decode(heapu8.subarray(messagePtr, heapu8.indexOf(0, messagePtr)));
-      if (message.startsWith("start ") || message.startsWith("recursing ")) {
-        if (message.startsWith("start ")) {
-          depthStack.push(depth);
-        }
-        depth++;
-        if (depth > trace.limits.maxDepth) {
-          trace.limits.maxDepth = depth;
-        }
-        if (limits && limits.depth && (depth >= limits.depth)) {
-          trace.limits.maxDepthAbort = true;
-          return 0; // SKIP!
-        }
+    var thisDepth = temp.depth;
+    var message = utf8Decoder.decode(heapu8.subarray(messagePtr, heapu8.indexOf(0, messagePtr)));
+    if (message.startsWith("start ") || message.startsWith("recursing ")) {
+      if (message.startsWith("start ")) {
+        temp.depthStack.push(temp.depth);
       }
-      else if (message.startsWith("end ")) {
-        depth = depthStack.pop();
+      temp.depth++;
+      if (temp.depth > trace.limits.maxDepth) {
+        trace.limits.maxDepth = temp.depth;
       }
-      else if (message.startsWith("recursed ")) {
-        depth--;
+      if (temp.limits && temp.limits.depth && (temp.depth >= temp.limits.depth)) {
+        trace.limits.maxDepthAbort = true;
+        return 0; // SKIP!
       }
-
-      if (message.startsWith("start table GSUB")) {
-        currentPhase = GSUB_PHASE;
-        gsub_point = trace_count-1;
-      }
-      else if (message.startsWith("start table GPOS")) {
-        currentPhase = GPOS_PHASE;
-        gpos_point = trace_count-1;
-      }
-
-      if (currentPhase != stop_phase)
-        stopping = false;
-
-      if (failure)
-        return 1;
-
-      if (stop_count && (trace_count > stop_count))
-        stopping = true;
-
-      if (stop_phase != DONT_STOP && currentPhase == stop_phase && message.startsWith("end lookup " + stop_at))
-        stopping = true;
-
-      if (stopping)
-        return 0;
-
-      exports.hb_buffer_serialize_glyphs(
-        bufferPtr,
-        0, exports.hb_buffer_get_length(bufferPtr),
-        traceBufPtr, traceBufLen, 0,
-        fontPtr,
-        HB_BUFFER_SERIALIZE_FORMAT_JSON,
-        HB_BUFFER_SERIALIZE_FLAG_NO_GLYPH_NAMES);
-
-      const blen = exports.hb_buffer_get_length(bufferPtr);
-      if (blen > trace.limits.maxGlyph) {
-        trace.limits.maxGlyph = blen;
-        if ((glyphCountMax > 0) && (blen >= glyphCountMax)) {
-          trace.limits.maxGlyphAbort = true;
-          return 0; // SKIP!
-        }
-      }
-      trace.push({
-        d: thisDepth,
-        m: message,
-        t: JSON.parse(utf8Decoder.decode(heapu8.subarray(traceBufPtr, heapu8.indexOf(0, traceBufPtr)))),
-        glyphs: exports.hb_buffer_get_content_type(bufferPtr) == HB_BUFFER_CONTENT_TYPE_GLYPHS,
-      });
-
-      return 1;
+    }
+    else if (message.startsWith("end ")) {
+      temp.depth = temp.depthStack.pop();
+    }
+    else if (message.startsWith("recursed ")) {
+      temp.depth--;
     }
 
-    var traceFuncPtr = addFunction(traceFunc, 'iiiii');
-    exports.hb_buffer_set_message_func(buffer.ptr, traceFuncPtr, 0, 0);
+    if (message.startsWith("start table GSUB")) {
+      temp.currentPhase = GSUB_PHASE;
+      temp.gsub_point = temp.trace_count-1;
+    }
+    else if (message.startsWith("start table GPOS")) {
+      temp.currentPhase = GPOS_PHASE;
+      temp.gpos_point = temp.trace_count-1;
+    }
+
+    if (temp.currentPhase != temp.stop_phase)
+      temp.stopping = false;
+
+    if (temp.failure)
+      return 1;
+
+    if (temp.stop_count && (temp.trace_count > temp.stop_count))
+      temp.stopping = true;
+
+    if (temp.stop_phase != DONT_STOP && temp.currentPhase == temp.stop_phase && message.startsWith("end lookup " + temp.stop_at))
+      temp.stopping = true;
+
+    if (temp.stopping)
+      return 0;
+
+    exports.hb_buffer_serialize_glyphs(
+      bufferPtr,
+      0, exports.hb_buffer_get_length(bufferPtr),
+      temp.traceBufPtr, temp.traceBufLen, 0,
+      fontPtr,
+      HB_BUFFER_SERIALIZE_FORMAT_JSON,
+      HB_BUFFER_SERIALIZE_FLAG_NO_GLYPH_NAMES);
+
+    const blen = exports.hb_buffer_get_length(bufferPtr);
+    if (blen > trace.limits.maxGlyph) {
+      trace.limits.maxGlyph = blen;
+      if ((temp.glyphCountMax > 0) && (blen >= temp.glyphCountMax)) {
+        trace.limits.maxGlyphAbort = true;
+        return 0; // SKIP!
+      }
+    }
+    trace.push({
+      d: thisDepth,
+      m: message,
+      t: JSON.parse(utf8Decoder.decode(heapu8.subarray(temp.traceBufPtr, heapu8.indexOf(0, temp.traceBufPtr)))),
+      glyphs: exports.hb_buffer_get_content_type(bufferPtr) == HB_BUFFER_CONTENT_TYPE_GLYPHS,
+    });
+
+    return 1;
+  }
+
+  function shapeWithTraceLimits(font, buffer, features, stop_at, stop_phase, limits, stop_count) {
+    var trace = [];
+    trace.limits = {};
+    trace.limits.maxDepth = 0;
+    trace.limits.maxGlyph = 0;
+
+    temp = [];
+    temp.trace = trace;
+    temp.trace_count = 0;
+    temp.gsub_point = -1;
+    temp.gpos_point = -1;
+    temp.currentPhase = DONT_STOP;
+    temp.stopping = false;
+    temp.failure = false;
+    temp.depth = 0;
+    temp.depthStack = [];
+    temp.charCountOriginal = exports.hb_buffer_get_length(buffer.ptr);
+    temp.glyphCountMax = 0;
+
+    temp.stop_count = stop_count;
+    temp.stop_at = stop_at;
+    temp.stop_phase = stop_phase;
+    temp.limits = limits;
+
+    if (limits && limits.maxGlyphRatio) temp.glyphCountMax = temp.charCountOriginal * limits.maxGlyphRatio;
+    if (limits && limits.maxGlyph) temp.glyphCountMax = limits.maxGlyph;
+
+    temp.traceBufLen = 1024 * 1024;
+    temp.traceBufPtr = exports.malloc(temp.traceBufLen);
+
+    if (!shapeWithTraceLimitsFuncPtr) {
+      shapeWithTraceLimitsFuncPtr = addFunction(shapeWithTraceLimitsFunc, 'iiiii');
+    }
+
+    exports.hb_buffer_set_message_func(buffer.ptr, shapeWithTraceLimitsFuncPtr, 0, 0);
     shape(font, buffer, features, 0);
-    exports.free(traceBufPtr);
-    trace.count = trace_count;
-    trace.gsub_point = gsub_point;
-    trace.gpos_point = gpos_point;
+    exports.hb_buffer_set_message_func(0, 0, 0, 0);
+    exports.free(temp.traceBufPtr);
+    trace.count = temp.trace_count;
+    trace.gsub_point = temp.gsub_point;
+    trace.gpos_point = temp.gpos_point;
+    temp = [];
     return trace;
   }
 
