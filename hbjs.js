@@ -2,12 +2,9 @@ function hbjs(Module) {
   'use strict';
 
   var exports = Module.wasmExports;
-  var heapu8 = Module.HEAPU8;
-  var heapu32 = Module.HEAPU32;
-  var heapi32 = Module.HEAP32;
-  var heapf32 = Module.HEAPF32;
   var utf8Decoder = new TextDecoder("utf8");
   let addFunction = Module.addFunction;
+  let removeFunction = Module.removeFunction;
 
   var freeFuncPtr = addFunction(function (ptr) { exports.free(ptr); }, 'vi');
 
@@ -55,7 +52,7 @@ function hbjs(Module) {
   **/
   function createBlob(blob) {
     var blobPtr = exports.malloc(blob.byteLength);
-    heapu8.set(new Uint8Array(blob), blobPtr);
+    Module.HEAPU8.set(new Uint8Array(blob), blobPtr);
     var ptr = exports.hb_blob_create(blobPtr, blob.byteLength, HB_MEMORY_MODE_WRITABLE, blobPtr, freeFuncPtr);
     return {
       ptr: ptr,
@@ -68,37 +65,16 @@ function hbjs(Module) {
 
   /**
    * Return the typed array of HarfBuzz set contents.
-   * @template {typeof Uint8Array | typeof Uint32Array | typeof Int32Array | typeof Float32Array} T
    * @param {number} setPtr Pointer of set
-   * @param {T} arrayClass Typed array class
-   * @returns {InstanceType<T>} Typed array instance
+   * @returns {Uint32Array} Typed array instance
    */
-  function typedArrayFromSet(setPtr, arrayClass) {
-    let heap = heapu8;
-    if (arrayClass === Uint32Array) {
-      heap = heapu32;
-    } else if (arrayClass === Int32Array) {
-      heap = heapi32;
-    } else if (arrayClass === Float32Array) {
-      heap = heapf32;
-    }
-    const bytesPerElment = arrayClass.BYTES_PER_ELEMENT;
+  function typedArrayFromSet(setPtr) {
     const setCount = exports.hb_set_get_population(setPtr);
-    const arrayPtr = exports.malloc(
-      setCount * bytesPerElment,
-    );
-    const arrayOffset = arrayPtr / bytesPerElment;
-    const array = heap.subarray(
-      arrayOffset,
-      arrayOffset + setCount,
-    );
-    heap.set(array, arrayOffset);
-    exports.hb_set_next_many(
-      setPtr,
-      HB_SET_VALUE_INVALID,
-      arrayPtr,
-      setCount,
-    );
+    const arrayPtr = exports.malloc(setCount << 2);
+    const arrayOffset = arrayPtr >> 2;
+    const array = Module.HEAPU32.subarray(arrayOffset, arrayOffset + setCount);
+    Module.HEAPU32.set(array, arrayOffset);
+    exports.hb_set_next_many(setPtr, HB_SET_VALUE_INVALID, arrayPtr, setCount);
     return array;
   }
 
@@ -123,7 +99,7 @@ function hbjs(Module) {
         var length = exports.hb_blob_get_length(blob);
         if (!length) { return; }
         var blobptr = exports.hb_blob_get_data(blob, null);
-        var table_string = heapu8.subarray(blobptr, blobptr+length);
+        var table_string = Module.HEAPU8.subarray(blobptr, blobptr+length);
         return table_string;
       },
       /**
@@ -132,14 +108,14 @@ function hbjs(Module) {
       getAxisInfos: function() {
         var axis = exports.malloc(64 * 32);
         var c = exports.malloc(4);
-        heapu32[c / 4] = 64;
+        Module.HEAPU32[c / 4] = 64;
         exports.hb_ot_var_get_axis_infos(ptr, 0, c, axis);
         var result = {};
-        Array.from({ length: heapu32[c / 4] }).forEach(function (_, i) {
-          result[_hb_untag(heapu32[axis / 4 + i * 8 + 1])] = {
-            min: heapf32[axis / 4 + i * 8 + 4],
-            default: heapf32[axis / 4 + i * 8 + 5],
-            max: heapf32[axis / 4 + i * 8 + 6]
+        Array.from({ length: Module.HEAPU32[c / 4] }).forEach(function (_, i) {
+          result[_hb_untag(Module.HEAPU32[axis / 4 + i * 8 + 1])] = {
+            min: Module.HEAPF32[axis / 4 + i * 8 + 4],
+            default: Module.HEAPF32[axis / 4 + i * 8 + 5],
+            max: Module.HEAPF32[axis / 4 + i * 8 + 6]
           };
         });
         exports.free(c);
@@ -152,7 +128,7 @@ function hbjs(Module) {
       collectUnicodes: function() {
         var unicodeSetPtr = exports.hb_set_create();
         exports.hb_face_collect_unicodes(ptr, unicodeSetPtr);
-        var result = typedArrayFromSet(unicodeSetPtr, Uint32Array);
+        var result = typedArrayFromSet(unicodeSetPtr);
         exports.hb_set_destroy(unicodeSetPtr);
         return result;
       },
@@ -177,6 +153,11 @@ function hbjs(Module) {
   function createFont(face) {
     var ptr = exports.hb_font_create(face.ptr);
     var drawFuncsPtr = null;
+    var moveToPtr = null;
+    var lineToPtr = null;
+    var cubicToPtr = null;
+    var quadToPtr = null;
+    var closePathPtr = null;
 
     /**
     * Return a glyph as an SVG path string.
@@ -200,11 +181,11 @@ function hbjs(Module) {
           pathBuffer += 'Z';
         }
 
-        var moveToPtr = addFunction(moveTo, 'viiiffi');
-        var lineToPtr = addFunction(lineTo, 'viiiffi');
-        var cubicToPtr = addFunction(cubicTo, 'viiiffffffi');
-        var quadToPtr = addFunction(quadTo, 'viiiffffi');
-        var closePathPtr = addFunction(closePath, 'viiii');
+        moveToPtr = addFunction(moveTo, 'viiiffi');
+        lineToPtr = addFunction(lineTo, 'viiiffi');
+        cubicToPtr = addFunction(cubicTo, 'viiiffffffi');
+        quadToPtr = addFunction(quadTo, 'viiiffffi');
+        closePathPtr = addFunction(closePath, 'viiii');
         drawFuncsPtr = exports.hb_draw_funcs_create();
         exports.hb_draw_funcs_set_move_to_func(drawFuncsPtr, moveToPtr, 0, 0);
         exports.hb_draw_funcs_set_line_to_func(drawFuncsPtr, lineToPtr, 0, 0);
@@ -229,7 +210,7 @@ function hbjs(Module) {
         nameBuffer,
         nameBufferSize
       );
-      var array = heapu8.subarray(nameBuffer, nameBuffer + nameBufferSize);
+      var array = Module.HEAPU8.subarray(nameBuffer, nameBuffer + nameBufferSize);
       return utf8Decoder.decode(array.slice(0, array.indexOf(0)));
     }
 
@@ -266,8 +247,8 @@ function hbjs(Module) {
         var entries = Object.entries(variations);
         var vars = exports.malloc(8 * entries.length);
         entries.forEach(function (entry, i) {
-          heapu32[vars / 4 + i * 2 + 0] = hb_tag(entry[0]);
-          heapf32[vars / 4 + i * 2 + 1] = entry[1];
+          Module.HEAPU32[vars / 4 + i * 2 + 0] = hb_tag(entry[0]);
+          Module.HEAPF32[vars / 4 + i * 2 + 1] = entry[1];
         });
         exports.hb_font_set_variations(ptr, vars, entries.length);
         exports.free(vars);
@@ -275,7 +256,18 @@ function hbjs(Module) {
       /**
       * Free the object.
       */
-      destroy: function () { exports.hb_font_destroy(ptr); }
+      destroy: function () {
+        exports.hb_font_destroy(ptr);
+        if (drawFuncsPtr) {
+          exports.hb_draw_funcs_destroy(drawFuncsPtr);
+          drawFuncsPtr = null;
+          removeFunction(moveToPtr);
+          removeFunction(lineToPtr);
+          removeFunction(cubicToPtr);
+          removeFunction(quadToPtr);
+          removeFunction(closePathPtr);
+        }
+      }
     };
   }
 
@@ -288,9 +280,9 @@ function hbjs(Module) {
     for (let i = 0; i < text.length; ++i) {
       const char = text.charCodeAt(i);
       if (char > 127) throw new Error('Expected ASCII text');
-      heapu8[ptr + i] = char;
+      Module.HEAPU8[ptr + i] = char;
     }
-    heapu8[ptr + text.length] = 0;
+    Module.HEAPU8[ptr + text.length] = 0;
     return {
       ptr: ptr,
       length: text.length,
@@ -412,8 +404,8 @@ function hbjs(Module) {
         var infosPtr = exports.hb_buffer_get_glyph_infos(ptr, 0);
         var infosPtr32 = infosPtr / 4;
         var positionsPtr32 = exports.hb_buffer_get_glyph_positions(ptr, 0) / 4;
-        var infos = heapu32.subarray(infosPtr32, infosPtr32 + 5 * length);
-        var positions = heapi32.subarray(positionsPtr32, positionsPtr32 + 5 * length);
+        var infos = Module.HEAPU32.subarray(infosPtr32, infosPtr32 + 5 * length);
+        var positions = Module.HEAP32.subarray(positionsPtr32, positionsPtr32 + 5 * length);
         for (var i = 0; i < length; ++i) {
           result.push({
             g: infos[i * 5 + 0],
@@ -480,70 +472,56 @@ function hbjs(Module) {
       refers to a lookup ID in the GSUB table), 2 (`stop_at` refers to a lookup
       ID in the GPOS table).
   */
-  var temp = []; // Temporary
-  var shapeWithTraceFuncPtr = null;
-
-  function shapeWithTraceFunc(bufferPtr, fontPtr, messagePtr, user_data) {
-    var trace = temp.trace;
-    var message = utf8Decoder.decode(heapu8.subarray(messagePtr, heapu8.indexOf(0, messagePtr)));
-    if (message.startsWith("start table GSUB"))
-      temp.currentPhase = GSUB_PHASE;
-    else if (message.startsWith("start table GPOS"))
-      temp.currentPhase = GPOS_PHASE;
-
-    if (temp.currentPhase != temp.stop_phase)
-      temp.stopping = false;
-
-    if (temp.failure)
-      return 1;
-
-    if (temp.stop_phase != DONT_STOP && temp.currentPhase == temp.stop_phase && message.startsWith("end lookup " + temp.stop_at))
-      temp.stopping = true;
-
-    if (temp.stopping)
-      return 0;
-
-    exports.hb_buffer_serialize_glyphs(
-      bufferPtr,
-      0, exports.hb_buffer_get_length(bufferPtr),
-      temp.traceBufPtr, temp.traceBufLen, 0,
-      fontPtr,
-      HB_BUFFER_SERIALIZE_FORMAT_JSON,
-      HB_BUFFER_SERIALIZE_FLAG_NO_GLYPH_NAMES);
-
-    trace.push({
-      m: message,
-      t: JSON.parse(utf8Decoder.decode(heapu8.subarray(temp.traceBufPtr, heapu8.indexOf(0, temp.traceBufPtr)))),
-      glyphs: exports.hb_buffer_get_content_type(bufferPtr) == HB_BUFFER_CONTENT_TYPE_GLYPHS,
-    });
-
-    return 1;
-  }
-
   function shapeWithTrace(font, buffer, features, stop_at, stop_phase) {
     var trace = [];
+    var currentPhase = DONT_STOP;
+    var stopping = false;
+    var failure = false;
 
-    temptrace_t = [];
-    temp.trace = trace;
-    temp.currentPhase = DONT_STOP;
-    temp.stopping = false;
-    temp.failure = false;
-    temp.stop_at = stop_at;
-    tmpe.stop_phase = stop_phase;
+    var traceBufLen = 1024 * 1024;
+    var traceBufPtr = exports.malloc(traceBufLen);
 
-    temp.traceBufLen = 1024 * 1024;
-    temp.traceBufPtr = exports.malloc(temp.traceBufLen);
+    var traceFunc = function (bufferPtr, fontPtr, messagePtr, user_data) {
+      var message = utf8Decoder.decode(Module.HEAPU8.subarray(messagePtr, Module.HEAPU8.indexOf(0, messagePtr)));
+      if (message.startsWith("start table GSUB"))
+        currentPhase = GSUB_PHASE;
+      else if (message.startsWith("start table GPOS"))
+        currentPhase = GPOS_PHASE;
 
-    if (!shapeWithTraceFuncPtr) {
-      shapeWithTraceFuncPtr = addFunction(shapeWithTraceFunc, 'iiiii');
+      if (currentPhase != stop_phase)
+        stopping = false;
+
+      if (failure)
+        return 1;
+
+      if (stop_phase != DONT_STOP && currentPhase == stop_phase && message.startsWith("end lookup " + stop_at))
+        stopping = true;
+
+      if (stopping)
+        return 0;
+
+      exports.hb_buffer_serialize_glyphs(
+        bufferPtr,
+        0, exports.hb_buffer_get_length(bufferPtr),
+        traceBufPtr, traceBufLen, 0,
+        fontPtr,
+        HB_BUFFER_SERIALIZE_FORMAT_JSON,
+        HB_BUFFER_SERIALIZE_FLAG_NO_GLYPH_NAMES);
+
+      trace.push({
+        m: message,
+        t: JSON.parse(utf8Decoder.decode(Module.HEAPU8.subarray(traceBufPtr, Module.HEAPU8.indexOf(0, traceBufPtr)))),
+        glyphs: exports.hb_buffer_get_content_type(bufferPtr) == HB_BUFFER_CONTENT_TYPE_GLYPHS,
+      });
+
+      return 1;
     }
 
-    exports.hb_buffer_set_message_func(buffer.ptr, shapeWithTraceFuncPtr, 0, 0);
+    var traceFuncPtr = addFunction(traceFunc, 'iiiii');
+    exports.hb_buffer_set_message_func(buffer.ptr, traceFuncPtr, 0, 0);
     shape(font, buffer, features, 0);
-    exports.hb_buffer_set_message_func(0, 0, 0, 0);
-    exports.free(temp.traceBufPtr);
-    temp = [];
-
+    exports.free(traceBufPtr);
+    removeFunction(traceFuncPtr);
     return trace;
   }
 
@@ -570,128 +548,113 @@ function hbjs(Module) {
   * @param {object} limits: Definition of limits. `limits.maxGlyphRatio`, `limits.maxGlyph`, `limits.maxDepth`
   * @return trace: includes `trace.limits.maxDepth`, `trace.limits.maxGlyph`, `trace.limits.maxDepthAbort`, `trace.limits.maxGlyphAbort`
   */
-  var shapeWithTraceLimitsFuncPtr = null;
-  function shapeWithTraceLimitsFunc(bufferPtr, fontPtr, messagePtr, user_data) {
-    var trace = temp.trace;
-    if (trace.limits.maxGlyphAbort || trace.limits.maxDepthAbort) return 0; // ABORT!
-    temp.trace_count++;
-    if (temp.stop_count && (temp.trace_count > temp.stop_count))
-      return 0;
-
-    var thisDepth = temp.depth;
-    var message = utf8Decoder.decode(heapu8.subarray(messagePtr, heapu8.indexOf(0, messagePtr)));
-    if (message.startsWith("start ") || message.startsWith("recursing ")) {
-      if (message.startsWith("start ")) {
-        temp.depthStack.push(temp.depth);
-      }
-      temp.depth++;
-      if (temp.depth > trace.limits.maxDepth) {
-        trace.limits.maxDepth = temp.depth;
-      }
-      if (temp.limits && temp.limits.depth && (temp.depth >= temp.limits.depth)) {
-        trace.limits.maxDepthAbort = true;
-        return 0; // SKIP!
-      }
-    }
-    else if (message.startsWith("end ")) {
-      temp.depth = temp.depthStack.pop();
-    }
-    else if (message.startsWith("recursed ")) {
-      temp.depth--;
-    }
-
-    if (message.startsWith("start table GSUB")) {
-      temp.currentPhase = GSUB_PHASE;
-      temp.gsub_point = temp.trace_count-1;
-    }
-    else if (message.startsWith("start table GPOS")) {
-      temp.currentPhase = GPOS_PHASE;
-      temp.gpos_point = temp.trace_count-1;
-    }
-
-    if (temp.currentPhase != temp.stop_phase)
-      temp.stopping = false;
-
-    if (temp.failure)
-      return 1;
-
-    if (temp.stop_count && (temp.trace_count > temp.stop_count))
-      temp.stopping = true;
-
-    if (temp.stop_phase != DONT_STOP && temp.currentPhase == temp.stop_phase && message.startsWith("end lookup " + temp.stop_at))
-      temp.stopping = true;
-
-    if (temp.stopping)
-      return 0;
-
-    exports.hb_buffer_serialize_glyphs(
-      bufferPtr,
-      0, exports.hb_buffer_get_length(bufferPtr),
-      temp.traceBufPtr, temp.traceBufLen, 0,
-      fontPtr,
-      HB_BUFFER_SERIALIZE_FORMAT_JSON,
-      HB_BUFFER_SERIALIZE_FLAG_NO_GLYPH_NAMES);
-
-    const blen = exports.hb_buffer_get_length(bufferPtr);
-    if (blen > trace.limits.maxGlyph) {
-      trace.limits.maxGlyph = blen;
-      if ((temp.glyphCountMax > 0) && (blen >= temp.glyphCountMax)) {
-        trace.limits.maxGlyphAbort = true;
-        return 0; // SKIP!
-      }
-    }
-    trace.push({
-      d: thisDepth,
-      m: message,
-      t: JSON.parse(utf8Decoder.decode(heapu8.subarray(temp.traceBufPtr, heapu8.indexOf(0, temp.traceBufPtr)))),
-      glyphs: exports.hb_buffer_get_content_type(bufferPtr) == HB_BUFFER_CONTENT_TYPE_GLYPHS,
-    });
-
-    return 1;
-  }
-
   function shapeWithTraceLimits(font, buffer, features, stop_at, stop_phase, limits, stop_count) {
     var trace = [];
-    trace.limits = {};
+    trace.limits = {}
     trace.limits.maxDepth = 0;
     trace.limits.maxGlyph = 0;
+    var currentPhase = DONT_STOP;
+    var stopping = false;
+    var failure = false;
+    var depth = 0;
+    var depthStack = [];
+    var trace_count = 0;
+    var gsub_point = -1;
+    var gpos_point = -1;
+    var charCountOriginal = exports.hb_buffer_get_length(buffer.ptr);
+    var glyphCountMax = 0;
+    if (limits && limits.maxGlyphRatio) glyphCountMax = charCountOriginal * limits.maxGlyphRatio;
+    if (limits && limits.maxGlyph) glyphCountMax = limits.maxGlyph;
 
-    temp = [];
-    temp.trace = trace;
-    temp.trace_count = 0;
-    temp.gsub_point = -1;
-    temp.gpos_point = -1;
-    temp.currentPhase = DONT_STOP;
-    temp.stopping = false;
-    temp.failure = false;
-    temp.depth = 0;
-    temp.depthStack = [];
-    temp.charCountOriginal = exports.hb_buffer_get_length(buffer.ptr);
-    temp.glyphCountMax = 0;
+    var traceBufLen = 1024 * 1024;
+    var traceBufPtr = exports.malloc(traceBufLen);
 
-    temp.stop_count = stop_count;
-    temp.stop_at = stop_at;
-    temp.stop_phase = stop_phase;
-    temp.limits = limits;
+    var traceFunc = function (bufferPtr, fontPtr, messagePtr, user_data) {
+      if (trace.limits.maxGlyphAbort || trace.limits.maxDepthAbort) return 0; // ABORT!
+      trace_count++;
+      if (stop_count && (trace_count > stop_count))
+        return 0;
 
-    if (limits && limits.maxGlyphRatio) temp.glyphCountMax = temp.charCountOriginal * limits.maxGlyphRatio;
-    if (limits && limits.maxGlyph) temp.glyphCountMax = limits.maxGlyph;
+      var thisDepth = depth;
+      var message = utf8Decoder.decode(Module.HEAPU8.subarray(messagePtr, Module.HEAPU8.indexOf(0, messagePtr)));
+      if (message.startsWith("start ") || message.startsWith("recursing ")) {
+        if (message.startsWith("start ")) {
+          depthStack.push(depth);
+        }
+        depth++;
+        if (depth > trace.limits.maxDepth) {
+          trace.limits.maxDepth = depth;
+        }
+        if (limits && limits.depth && (depth >= limits.depth)) {
+          trace.limits.maxDepthAbort = true;
+          return 0; // SKIP!
+        }
+      }
+      else if (message.startsWith("end ")) {
+        depth = depthStack.pop();
+      }
+      else if (message.startsWith("recursed ")) {
+        depth--;
+      }
 
-    temp.traceBufLen = 1024 * 1024;
-    temp.traceBufPtr = exports.malloc(temp.traceBufLen);
+      if (message.startsWith("start table GSUB")) {
+        currentPhase = GSUB_PHASE;
+        gsub_point = trace_count-1;
+      }
+      else if (message.startsWith("start table GPOS")) {
+        currentPhase = GPOS_PHASE;
+        gpos_point = trace_count-1;
+      }
 
-    if (!shapeWithTraceLimitsFuncPtr) {
-      shapeWithTraceLimitsFuncPtr = addFunction(shapeWithTraceLimitsFunc, 'iiiii');
+      if (currentPhase != stop_phase)
+        stopping = false;
+
+      if (failure)
+        return 1;
+
+      if (stop_count && (trace_count > stop_count))
+        stopping = true;
+
+      if (stop_phase != DONT_STOP && currentPhase == stop_phase && message.startsWith("end lookup " + stop_at))
+        stopping = true;
+
+      if (stopping)
+        return 0;
+
+      exports.hb_buffer_serialize_glyphs(
+        bufferPtr,
+        0, exports.hb_buffer_get_length(bufferPtr),
+        traceBufPtr, traceBufLen, 0,
+        fontPtr,
+        HB_BUFFER_SERIALIZE_FORMAT_JSON,
+        HB_BUFFER_SERIALIZE_FLAG_NO_GLYPH_NAMES);
+
+      const blen = exports.hb_buffer_get_length(bufferPtr);
+      if (blen > trace.limits.maxGlyph) {
+        trace.limits.maxGlyph = blen;
+        if ((glyphCountMax > 0) && (blen >= glyphCountMax)) {
+          trace.limits.maxGlyphAbort = true;
+          return 0; // SKIP!
+        }
+      }
+      trace.push({
+        d: thisDepth,
+        m: message,
+        t: JSON.parse(utf8Decoder.decode(Module.HEAPU8.subarray(traceBufPtr, Module.HEAPU8.indexOf(0, traceBufPtr)))),
+        glyphs: exports.hb_buffer_get_content_type(bufferPtr) == HB_BUFFER_CONTENT_TYPE_GLYPHS,
+      });
+
+      return 1;
     }
 
-    exports.hb_buffer_set_message_func(buffer.ptr, shapeWithTraceLimitsFuncPtr, 0, 0);
+    var traceFuncPtr = addFunction(traceFunc, 'iiiii');
+    exports.hb_buffer_set_message_func(buffer.ptr, traceFuncPtr, 0, 0);
     shape(font, buffer, features, 0);
-    exports.hb_buffer_set_message_func(0, 0, 0, 0);
-    exports.free(temp.traceBufPtr);
-    trace.count = temp.trace_count;
-    trace.gsub_point = temp.gsub_point;
-    trace.gpos_point = temp.gpos_point;
-    temp = [];
+    exports.free(traceBufPtr);
+    removeFunction(traceFuncPtr);
+    trace.count = trace_count;
+    trace.gsub_point = gsub_point;
+    trace.gpos_point = gpos_point;
     return trace;
   }
 
@@ -699,9 +662,9 @@ function hbjs(Module) {
     var versionPtr = exports.malloc(12);
     exports.hb_version(versionPtr, versionPtr + 4, versionPtr + 8);
     var version = {
-      major: heapu32[versionPtr / 4],
-      minor: heapu32[(versionPtr + 4) / 4],
-      micro: heapu32[(versionPtr + 8) / 4],
+      major: Module.HEAPU32[versionPtr / 4],
+      minor: Module.HEAPU32[(versionPtr + 4) / 4],
+      micro: Module.HEAPU32[(versionPtr + 8) / 4],
     };
     exports.free(versionPtr);
     return version;
@@ -709,7 +672,7 @@ function hbjs(Module) {
 
   function version_string() {
     var versionPtr = exports.hb_version_string();
-    var version = utf8Decoder.decode(heapu8.subarray(versionPtr, heapu8.indexOf(0, versionPtr)));
+    var version = utf8Decoder.decode(Module.HEAPU8.subarray(versionPtr, Module.HEAPU8.indexOf(0, versionPtr)));
     return version;
   }
 
