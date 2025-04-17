@@ -614,11 +614,7 @@ function updateResult() {
   //debugResult.innerText = 'upem='+hbsvg1.face.upem;
 }
 
-let harfBuzzModule; // not really needed with the hbjs wrapper
-createHarfBuzz().then(hbmodule=>{
-  harfBuzzModule = hbmodule;
-  window.hb = hbjs(hbmodule);
-  hbversion.innerHTML=hb.version_string()
+function onResourcesLoaded() {
   var fontname = 'samples/Gulzar-Regular-1.002.ttf';
   fetch(fontname).then(function (res) {
     return res.arrayBuffer();
@@ -626,9 +622,20 @@ createHarfBuzz().then(hbmodule=>{
     window.fontBlob = new Uint8Array(blob);
     hbsvg1.setFontBlob(window.fontBlob);
     hbsvg2.freeFontBlob();
+    if ((window.opener !== null) && (window.opener.openFontCompareTool)) {
+      acquireFontAndLists(window.opener);
+    }
     updateResult();
     updateLists();
   });
+}
+
+let harfBuzzModule; // not really needed with the hbjs wrapper
+createHarfBuzz().then(hbmodule=>{
+  harfBuzzModule = hbmodule;
+  window.hb = hbjs(hbmodule);
+  hbversion.innerHTML=hb.version_string()
+  onResourcesLoaded();
 });
 
 function UpdateListener(id, event, foo) {
@@ -1080,6 +1087,31 @@ function UpdateWithTimeline(e) {
   resetScrubber();
 }
 
+function acquireFontAndLists(w) {
+  if (!w.api || !w.api.transfer) return;
+  const xfer = w.api.transfer;  // Use this as a conduit for values to be passed in here
+  // Get values from Font Compare Word List tool...
+  if (xfer.fontBlob1) hbsvg1.setFontBlob(xfer.fontBlob1);
+  if (xfer.fontBlob2) hbsvg2.setFontBlob(xfer.fontBlob2);
+  if (xfer.checkList && (xfer.checkList.length > 0)) {
+    mya = [];
+    var i = 0;
+    while (i < xfer.checkList.length) {
+      mya.push(xfer.checkList[i]);
+      i++;
+    }
+    hideTextButtons(false);
+  }
+  if (xfer.script !== null)   script.value   = xfer.script;
+  if (xfer.language !== null) language.value = xfer.language;
+  gotoLineFirst();
+}
+
+function updateTransfer(xfer) {
+  //console.log('updateTransfer');
+  acquireFontAndLists(window.opener);
+}
+
 // Glue update events...
 UpdateListener('text', 'keyup', UpdateText);
 UpdateListener('unicode', 'keyup', UpdateUnicode);
@@ -1119,6 +1151,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-04-10
+</br>Tool Version: 2025-04-17
 </p>
 </html>
