@@ -213,8 +213,11 @@ button {
 
 <tr><td class='svg' colspan=3>
 <!--<a id="svgResult" href="#" title="Click to download"></a>-->
-<div class='svg' id=svgResult></div>
+<div class='svg' id='svgResult'></div>
 <p><button id="saveSvg" onclick="DownloadSvg();">Download SVG</button>
+  <button id="zoomOutSVG" onclick="zoomSVG(-1);">-</button>
+  <button id="zoomResetSVG" onclick="zoomSVG(0);" title="Middle click or Shift-Left and drag to pan the SVG">100%</button>
+  <button id="zoomInSVG" onclick="zoomSVG(1);">+</button>
 </td></tr>
 <tr>
   <td class='label'>Timeline:</td>
@@ -334,7 +337,7 @@ class hbSvgClass {
       const otInfo = OTInfo.parse(fb);
       this.fontInfo = otInfo[0];
       const fontName = this.fontInfo.name;
-      console.log(fontName);
+      //console.log(fontName);
       this.fileDescription = fontName.fullName + '</br>' + fontName.version;
       this.fillTables();
     } else {
@@ -513,6 +516,76 @@ function getShapeResult(hbsvg) {
   return formatJson(hbsvg.results.json || '');
 }
 
+function updateSvg(dive, html) {
+  var oldScale = 1;
+  var oldTranslate = {x:0, y:0};
+
+  var svge = dive.children[0];
+  if (typeof svge !== 'undefined') {
+    oldScale = svge.currentScale;
+    oldTranslate = svge.currentTranslate;
+  }
+  dive.innerHTML = html;
+  svge = dive.children[0];
+  svge.currentScale = oldScale;
+  svge.currentTranslate.x = oldTranslate.x;
+  svge.currentTranslate.y = oldTranslate.y;
+}
+
+function adjustSVGzoom(svge, amount) {
+  var newScale
+  if (amount < 0){newScale=svge.currentScale/1.1}
+  if (amount > 0){newScale=svge.currentScale*1.1}
+  if (amount ==0){newScale=1}
+  var oldScale=svge.currentScale
+  var y = svge.clientHeight / 2;
+  svge.currentTranslate.y=(-y+svge.currentTranslate.y)*(newScale/oldScale)
+  svge.currentTranslate.x=(0+svge.currentTranslate.x)*(newScale/oldScale)
+  svge.currentScale=newScale
+  svge.currentTranslate.y+=y;
+  svge.currentTranslate.x+=0;
+}
+
+function zoomSVG(amount) {
+  const svge = svgResult.children[0];
+  adjustSVGzoom(svge, amount);
+  if (amount==0) {
+    svge.currentTranslate.y = 0;
+    svge.currentTranslate.x = 0;
+  }
+}
+
+function addSVGZoomAndPan(svg){
+  // From https://github.com/Holger-Will/SVGZoomAndPan/blob/master/zap.js
+  svg.addEventListener("mousedown",function(evt){
+    if(evt.shiftKey || evt.button==1){
+      svg.classList.add("dragging")
+      var ox=evt.offsetX
+      var oy=evt.offsetY
+      var otx=svg.currentTranslate.x
+      var oty=svg.currentTranslate.y
+      svg.addEventListener("mousemove",move)
+      document.addEventListener("mouseup",out)
+      var event = new Event('SVGScroll');
+      svg.dispatchEvent(event)
+      function out(evt){
+        svg.removeEventListener("mousemove",move)
+        document.removeEventListener("mouseup",out)
+        svg.classList.remove("dragging")
+        var event = new Event('SVGScroll');
+        svg.dispatchEvent(event)
+      }
+      function move(evt){
+        svg.currentTranslate.x=otx+(evt.offsetX-ox)
+        svg.currentTranslate.y=oty+(evt.offsetY-oy)
+        var event = new Event('SVGScroll');
+        svg.dispatchEvent(event)
+      }
+    }
+  })
+}
+
+
 function updateResult() {
   scaleLabel.innerText = scale.value;
 
@@ -525,7 +598,7 @@ function updateResult() {
   */
   if (baseLine.checked) {
     svgPath +=
-      '<path style="stroke:#ff4040;stroke-opacity:0.5;stroke-width:5" d="M-300 0 L8000 0"></path>'+
+      '<path style="stroke:#ff4040;stroke-opacity:0.5;stroke-width:5" d="M-300 0 L16000 0"></path>'+
       '<path style="stroke:#ff4040;stroke-opacity:0.5;stroke-width:5" d="M0 -1500 L0 3000"></path>';
   }
 
@@ -609,8 +682,9 @@ function updateResult() {
     ih += '<text font-size="120" x="0" y="1200" fill="green">'+textLineInfo+'</text>';
   }
   ih += svgPath + '</svg>';
-  svgResult.innerHTML = ih;
-
+  updateSvg(svgResult, ih);
+  var svge = svgResult.children[0];
+  addSVGZoomAndPan(svge);
   //debugResult.innerText = 'upem='+hbsvg1.face.upem;
 }
 
@@ -1151,6 +1225,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-04-17
+</br>Tool Version: 2025-04-24
 </p>
 </html>
