@@ -557,6 +557,20 @@ function zoomSVG(amount) {
 
 function addSVGZoomAndPan(svg){
   // From https://github.com/Holger-Will/SVGZoomAndPan/blob/master/zap.js
+  svg.addEventListener("wheel",function(evt){
+    var newScale
+    if(evt.deltaY>0){newScale=svg.currentScale/1.1}
+    if(evt.deltaY<0){newScale=svg.currentScale*1.1}
+    var oldScale=svg.currentScale
+     svg.currentTranslate.x=(-evt.offsetX+svg.currentTranslate.x)*(newScale/oldScale)
+     svg.currentTranslate.y=(-evt.offsetY+svg.currentTranslate.y)*(newScale/oldScale)
+     svg.currentScale=newScale
+     svg.currentTranslate.x+=evt.offsetX
+     svg.currentTranslate.y+=evt.offsetY
+     var event = new Event('SVGZoom');
+     svg.dispatchEvent(event);
+     evt.preventDefault();  // Stop window from scrolling (update to zap.js)
+  })
   svg.addEventListener("mousedown",function(evt){
     if(evt.shiftKey || evt.button==1){
       svg.classList.add("dragging")
