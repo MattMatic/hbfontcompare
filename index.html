@@ -1032,6 +1032,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
   var colour_solid = options.colour_solid || '#f37418'; // #0523d4 (blue)
   var r;
   var idx = 0;
+  var n = 0;
 
   for (r of result) {
     var colourGlyph = colour_solid;
@@ -1103,7 +1104,9 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
            +'fill="'+colourExtents+'" />'
     }
     path +=
-        '<path style="fill:'
+        '<path '+
+          'id="n'+n+'_g'+r.g+'_c'+r.cl+'"'+
+          'style="fill:'
           +colourGlyph
           +';stroke:'+colourStroke
           //+';paint-order:stroke'+
@@ -1124,6 +1127,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
     svgPath += path;
     x += r.ax + x_stretch;
     y += r.ay;
+    n++;
   }
   obj.results.x_end = x;
   obj.results.y_end = y;
@@ -1239,6 +1243,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-04-25
+</br>Tool Version: 2025-05-01
 </p>
 </html>
