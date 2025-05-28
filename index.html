@@ -801,7 +801,7 @@ patchDragDrop(document.getElementById('dropName2'), handleFontUpdate2);
 patchDragDrop(document.getElementById('textdrop'), handleTextDrop);
 
 // Operate on results of font.pathToJson(gid)
-// maxxy - gets filled with the maximum .x and .y of the glyph
+// extxy - gets filled with the maximum extents .x and .y of the glyph
 //         so can be used for advance in the GSUB stage (where there's no metrics yet available)
 function glyphToRelative(glyph, retxy, extxy) {
   var r = [];
@@ -894,7 +894,7 @@ function transferResult(result, trace_entry, hb_entry) {
   re.g = trace_entry.g;
   re.cl = trace_entry.cl;
   if (typeof trace_entry.ax === 'undefined') {
-    re.ax = -1; // This is picked up later and we use the glyphs max.x to advance
+    re.ax = -9999; // This is picked up later and we use the glyphs max.x to advance
     re.ay = 0;
     re.dx = 0;
     re.dy = 0;
@@ -1011,11 +1011,11 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
 
   // returns glyphs paths, totally optional
   var glyphs = {};
-  var paths  = {};
+  //var paths  = {};
   result.forEach(function (x) {
     if (glyphs[x.g]) return;
     glyphs[x.g] = font.glyphToJson(x.g);
-    paths[x.g]  = font.glyphToPath(x.g);
+    //paths[x.g]  = font.glyphToPath(x.g);
   });
   buffer.destroy();
 
@@ -1063,7 +1063,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
     var blendMode = options.blendMode || 'normal';
     var ext = {};
     const glyphSvg = jsonToSvg(glyphToRelative(glyphs[r.g], false, ext));
-    if (r.ax < 0) {
+    if (r.ax == -9999) {
       // for GSUB phase where there's no advance
       // (r.ax will be set to -1 in `transferResult`)
       if (ext.w <= 1) ext.w = (obj.face.upem / 6);
@@ -1243,6 +1243,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-05-01
+</br>Tool Version: 2025-05-28
 </p>
 </html>
