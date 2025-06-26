@@ -522,6 +522,37 @@ function getShapeResult(hbsvg) {
   return formatJson(hbsvg.results.json || '');
 }
 
+function getShapeResultDiff(jsonThis, jsonPrev, diffColour) {
+  if (!jsonPrev || (jsonPrev === '')) return jsonThis;
+  if (!jsonThis || (jsonThis === '')) return jsonThis;
+  const linesThis = jsonThis.split('\r\n');
+  const linesPrev = jsonPrev.split('\r\n');
+  var res = '';
+  const size = linesThis.length;
+  for (let i=0; i<size; i++) {
+    const lineThis = linesThis[i];
+    const linePrev = linesPrev[i];
+    if ((lineThis !== linePrev) && lineThis && linePrev && (lineThis !== '') && (linePrev !== '')) {
+      const valsThis = linesThis[i].split(',"');
+      const valsPrev = linesPrev[i].split(',"');
+      var l = '';
+      const n = valsThis.length;
+      for (let ii=0; ii<n; ii++) {
+        if (valsThis[ii] !== valsPrev[ii])
+          l += '<font color="'+diffColour+'">'+valsThis[ii]+'</font>';
+        else
+          l += valsThis[ii];
+        l += ',"';
+      }
+      res += l;
+    } else {
+      res += linesThis[i];
+    }
+    res += '\r\n';
+  }
+  return res;
+}
+
 function updateSvg(dive, html) {
   var oldScale = 1;
   var oldTranslate = {x:0, y:0};
@@ -665,10 +696,13 @@ function updateResult() {
   hbsvg1.options.opacity_stroke = opacityStroke.value;
   hbsvg1.options.stroke_width = strokeWidth.value;
 
+  var hbsgv1_json = getShapeResult(hbsvg1);
+  var hbsgv2_json = getShapeResult(hbsvg2);
+
   if (hbsvg2.fontBlob) {
     svgPath += hbsvg2.toSvg(text.value, true, false);
     harfBuzzResult2.innerHTML = getHarfBuzzResult(hbsvg2);
-    shapeResult2.innerHTML = getShapeResult(hbsvg2);
+    shapeResult2.innerHTML = getShapeResultDiff(hbsgv2_json, hbsgv1_json, '#f00');
   } else {
     harfBuzzResult2.innerHTML = '';
     shapeResult2.innerHTML = '';
@@ -676,7 +710,7 @@ function updateResult() {
   if (hbsvg1.fontBlob) {
     svgPath += hbsvg1.toSvg(text.value, true, true);
     harfBuzzResult1.innerHTML = getHarfBuzzResult(hbsvg1);
-    shapeResult1.innerHTML = getShapeResult(hbsvg1);
+    shapeResult1.innerHTML = getShapeResultDiff(hbsgv1_json, hbsgv2_json, '#f00');
   } else {
     harfBuzzResult1.innerHTML = '';
     shapeResult1.innerHTML = '';
