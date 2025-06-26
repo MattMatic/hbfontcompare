@@ -23,6 +23,12 @@ table, th, td {
   font-family: 'Lucida Console';
   font-size: 70%;
 }
+.diff1 {
+  background-color: #ef5;
+}
+.diff2 {
+  background-color: #5ef;
+}
 input {
   background-color: #d0e0d0;
   accent-color: #608060;
@@ -522,7 +528,7 @@ function getShapeResult(hbsvg) {
   return formatJson(hbsvg.results.json || '');
 }
 
-function getShapeResultDiff(jsonThis, jsonPrev, diffColour) {
+function getShapeResultDiff(jsonThis, jsonPrev, spanStyle) {
   if (!jsonPrev || (jsonPrev === '')) return jsonThis;
   if (!jsonThis || (jsonThis === '')) return jsonThis;
   const linesThis = jsonThis.split('\r\n');
@@ -538,10 +544,21 @@ function getShapeResultDiff(jsonThis, jsonPrev, diffColour) {
       var l = '';
       const n = valsThis.length;
       for (let ii=0; ii<n; ii++) {
-        if (valsThis[ii] !== valsPrev[ii])
-          l += '<font color="'+diffColour+'">'+valsThis[ii]+'</font>';
+        var vThis = valsThis[ii];
+        var vPrev = valsPrev[ii];
+        if (vThis !== vPrev) {
+          if (vThis.startsWith('{')) {
+            l += '{';
+            vThis = vThis.substr(1);
+          }
+          if (l.endsWith('"')) {
+            l = l.slice(0, -1);
+            vThis = '"' + vThis;
+          }
+          l += '<span class="'+spanStyle+'">'+vThis+'</span>';
+        }
         else
-          l += valsThis[ii];
+          l += vThis;
         l += ',"';
       }
       res += l;
@@ -696,23 +713,30 @@ function updateResult() {
   hbsvg1.options.opacity_stroke = opacityStroke.value;
   hbsvg1.options.stroke_width = strokeWidth.value;
 
-  var hbsgv1_json = getShapeResult(hbsvg1);
-  var hbsgv2_json = getShapeResult(hbsvg2);
 
   if (hbsvg2.fontBlob) {
     svgPath += hbsvg2.toSvg(text.value, true, false);
     harfBuzzResult2.innerHTML = getHarfBuzzResult(hbsvg2);
-    shapeResult2.innerHTML = getShapeResultDiff(hbsgv2_json, hbsgv1_json, '#f00');
   } else {
     harfBuzzResult2.innerHTML = '';
-    shapeResult2.innerHTML = '';
   }
   if (hbsvg1.fontBlob) {
     svgPath += hbsvg1.toSvg(text.value, true, true);
     harfBuzzResult1.innerHTML = getHarfBuzzResult(hbsvg1);
-    shapeResult1.innerHTML = getShapeResultDiff(hbsgv1_json, hbsgv2_json, '#f00');
   } else {
     harfBuzzResult1.innerHTML = '';
+  }
+
+  var hbsgv1_json = getShapeResult(hbsvg1);
+  var hbsgv2_json = getShapeResult(hbsvg2);
+  if (hbsvg2.fontBlob) {
+    shapeResult2.innerHTML = getShapeResultDiff(hbsgv2_json, hbsgv1_json, 'diff2');
+  } else {
+    shapeResult2.innerHTML = '';    
+  }
+  if (hbsvg1.fontBlob) {
+    shapeResult1.innerHTML = getShapeResultDiff(hbsgv1_json, hbsgv2_json, 'diff1');
+  } else {
     shapeResult1.innerHTML = '';
   }
   fontName1.innerHTML = hbsvg1.fileDescription || '';
@@ -1283,6 +1307,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-06-26
+</br>Tool Version: 2025-06-26 n
 </p>
 </html>
