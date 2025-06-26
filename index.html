@@ -30,6 +30,7 @@ input {
 input[type="range"] {
   background-color: #d0e0d0;
   accent-color: #586858;
+  width: 35%;
 }
 button {
   background-color: #c0d0c0;
@@ -144,7 +145,7 @@ button {
     <td id='dropName2'><div id='fontName2'></div></td>
   </tr>
   <tr><td class='label' >Scale:</td>
-    <td colspan=2>
+    <td colspan=1>
       <input type="range" value="1000" min="100" max="4000" step="10" id="scale" ondblclick="scale.value=1000; updateResult();">
         <label for="scale" id="scaleLabel">1000</label>
     </td>
@@ -247,6 +248,11 @@ button {
 <script type="text/javascript" src="otinfo.min.js"></script>
 <script>
 'use strict';
+
+function isExists(v) {
+  if ((typeof(v) === 'object') && (v === null)) return false;
+  return typeof(v) !== 'undefined';
+}
 
 //----------------------------------
 // Matt Page / MattMatic
@@ -710,9 +716,7 @@ function onResourcesLoaded() {
     window.fontBlob = new Uint8Array(blob);
     hbsvg1.setFontBlob(window.fontBlob);
     hbsvg2.freeFontBlob();
-    if ((window.opener !== null) && (window.opener.openFontCompareTool)) {
-      acquireFontAndLists(window.opener);
-    }
+    acquireFontAndLists(window.opener);
     updateResult();
     updateLists();
   });
@@ -1073,7 +1077,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
     var path = '';
     if (showBoundingBox.checked && primary) {
       path += '<rect style="fill:'+colourExtents
-           +';fill-opacity:0.15;mix-blend-mode:"multiply" '
+           +';fill-opacity:0.15;mix-blend-mode:\'multiply\'" '
            +'width="'+(ext.w)+'"'
            +'height="'+(ext.h)+'"'
            +'x="'+(x+r.dx+ext.xl)+'" y="'+(y-r.dy-ext.yh)+'"'
@@ -1111,7 +1115,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
           +';stroke:'+colourStroke
           //+';paint-order:stroke'+
           +';fill-opacity:'+opacf+';stroke-opacity:'+opacs+';stroke-width:'+stroke_width
-          +'; mix-blend-mode: '+blendMode+'" '
+          +'; mix-blend-mode:\''+blendMode+'\'" '
         +'d="M'+x+' '+y+' '         // The absolute origin
         +'m'+r.dx+' '+(-r.dy)+' '   // negative y because the SVG coordinates are upside down
         +glyphSvg
@@ -1179,13 +1183,20 @@ function UpdateWithTimeline(e) {
   resetScrubber();
 }
 
-function acquireFontAndLists(w) {
-  if (!w.api || !w.api.transfer) return;
+function acquireFontAndLists() {
+  if (!window.opener) return;
+  const w = window.opener;
+  if (!isExists(w.api) || !isExists(w.api.transfer)) return;
   const xfer = w.api.transfer;  // Use this as a conduit for values to be passed in here
-  // Get values from Font Compare Word List tool...
-  if (xfer.fontBlob1) hbsvg1.setFontBlob(xfer.fontBlob1);
-  if (xfer.fontBlob2) hbsvg2.setFontBlob(xfer.fontBlob2);
-  if (xfer.checkList && (xfer.checkList.length > 0)) {
+  updateTransfer(xfer);
+}
+
+function updateTransfer(xfer) {
+  // Get values from the other tool...
+  if (!xfer) return;
+  if (isExists(xfer.fontBlob1)) hbsvg1.setFontBlob(xfer.fontBlob1);
+  if (isExists(xfer.fontBlob2)) hbsvg2.setFontBlob(xfer.fontBlob2);
+  if (isExists(xfer.checkList) && (xfer.checkList.length > 0)) {
     mya = [];
     var i = 0;
     while (i < xfer.checkList.length) {
@@ -1197,11 +1208,6 @@ function acquireFontAndLists(w) {
   if (xfer.script !== null)   script.value   = xfer.script;
   if (xfer.language !== null) language.value = xfer.language;
   gotoLineFirst();
-}
-
-function updateTransfer(xfer) {
-  //console.log('updateTransfer');
-  acquireFontAndLists(window.opener);
 }
 
 // Glue update events...
@@ -1243,6 +1249,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-05-28
+</br>Tool Version: 2025-06-26
 </p>
 </html>
