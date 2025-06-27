@@ -559,7 +559,7 @@ function getShapeResultDiff(jsonThis, jsonPrev, spanStyle) {
         }
         else
           l += vThis;
-        l += ',"';
+        if (ii < (n-1)) l += ',"';
       }
       res += l;
     } else {
@@ -1307,6 +1307,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-06-26 n
+</br>Tool Version: 2025-06-27n
 </p>
 </html>
