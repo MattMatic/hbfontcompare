@@ -1024,6 +1024,23 @@ function createResultArrayFromTrace(font, trace, hb_result) {
   return result;
 }
 
+function isHarfBuzzMessageImportant(msg) {
+  const set = [
+    'multiplying', 'multiplied',
+    'replacing',   'replaced',
+    'ligating',    'ligated',
+    'kerning',     'kerned',
+    'attaching',   'attached',
+    'positioning', 'positioned',
+    'deleting',    'deleted',
+  ];
+  const size = set.length;
+  for (let i=0;i<size;i++) {
+    if (msg.includes(set[i])) return true;
+  }
+  return false;
+}
+
 function findNextEvent(obj, text, startIndex, forward=true) {
   obj = obj || {};
   if (!("blob" in obj)) obj.blob = hb.createBlob(obj.fontBlob);
@@ -1047,17 +1064,7 @@ function findNextEvent(obj, text, startIndex, forward=true) {
   for (let i=0; i<max; i++) {
     const t = trace[i];
     const msg = t.m;
-    if (msg && 
-        (
-          msg.includes('multiplying') || msg.includes('multiplied') ||
-          msg.includes('replacing')   || msg.includes('replaced')   ||
-          msg.includes('ligating')    || msg.includes('ligated')    ||
-          msg.includes('kerning')     || msg.includes('kerned')     ||
-          msg.includes('attaching')   || msg.includes('attached')   ||
-          msg.includes('positioning') || msg.includes('positioned') 
-        )
-       ) 
-    {
+    if (msg && isHarfBuzzMessageImportant(msg)) {
       if (forward) {
         if (i > startIndex) {
           index = i;
