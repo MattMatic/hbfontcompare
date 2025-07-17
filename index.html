@@ -252,9 +252,30 @@ button {
 <p>Debug3:<div id="debugResult3"></div></p>
 --->
 
-<script type="text/javascript" src="hb.js"></script> <!-- Module - REQUIRED -->
-<script type="text/javascript" src="hbjs.js"></script> <!-- Wrapper, can be used without -->
-<script type="text/javascript" src="otinfo.min.js"></script>
+<script type='module'>
+import * as opentype from './js/opentype.min.mjs';
+import Layout from './js/opentype.layout.gdef.mjs';
+window.opentype = opentype;
+window.Layout = Layout;
+
+const promises = [
+      createHarfBuzz()
+    ];
+
+let harfBuzzModule;
+
+Promise.all(promises).then(([aharfBuzzModule]) => {
+  harfBuzzModule = aharfBuzzModule;
+  window.hb = hbjs(harfBuzzModule);
+  window.onResourcesLoaded();
+});
+
+</script>
+<script type="text/javascript" src="./js/hb.js"></script> <!-- Module - REQUIRED -->
+<script type="text/javascript" src="./js/hbjs.js"></script> <!-- Wrapper, can be used without -->
+<script type="text/javascript" src="./js/otinfo.min.js"></script>
+<script type="module" src="./js/opentype.min.mjs" async></script>
+<script type="module" src="./js/opentype.layout.gdef.mjs" async></script>
 <script>
 'use strict';
 
@@ -320,6 +341,8 @@ class hbSvgClass {
     if (this.font) { this.font.destroy(); delete(this.font); }
     if (this.face) { this.face.destroy(); delete(this.face); }
     if (this.blob) { this.blob.destroy(); delete(this.blob); }
+    delete(this.otLayout);
+    delete(this.otFont);
   }
   doGtable(t) {
     if (!t) return;
@@ -362,6 +385,14 @@ class hbSvgClass {
     this.blob = hb.createBlob(this.fontBlob);
     this.face = hb.createFace(this.blob, 0);
     this.font = hb.createFont(this.face);
+    this.otFont = opentype.parse(this.fontBlob);
+    this.otLayout = new Layout(this.otFont, 'GPOS');
+  }
+  getGlyphClass(gid) {
+    return this.otLayout.getGlyphClass(this.otFont?.tables?.gdef?.classDef, gid);
+  }
+  isGlyphClassMark(gid) {
+    return (this.getGlyphClass(gid) === 3);
   }
   copyOptions(fromOptions) {
     this.options = structuredClone(fromOptions);
@@ -770,6 +801,7 @@ function updateResult() {
 }
 
 function onResourcesLoaded() {
+  hbversion.innerHTML=hb.version_string()
   var fontname = 'samples/Gulzar-Regular-1.002.ttf';
   fetch(fontname).then(function (res) {
     return res.arrayBuffer();
@@ -783,6 +815,7 @@ function onResourcesLoaded() {
   });
 }
 
+/*
 let harfBuzzModule; // not really needed with the hbjs wrapper
 createHarfBuzz().then(hbmodule=>{
   harfBuzzModule = hbmodule;
@@ -790,6 +823,7 @@ createHarfBuzz().then(hbmodule=>{
   hbversion.innerHTML=hb.version_string()
   onResourcesLoaded();
 });
+*/
 
 function UpdateListener(id, event, foo) {
   var e = document.getElementById(id);
@@ -1252,10 +1286,12 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
         +'"/>\r\n';
     if (options.showGids) {
       var xOfs = 0; //r.dx
-      var fontSize = 100 * options.scale / 1000;
-      var yOfs = -650 - (idx % 4) * 130;
+      var fontSize = 95 * options.scale / 1000;
+      var yOfs = -650 - (idx % 5) * 100;
+      var gid = r.g;
+      if (obj.isGlyphClassMark(gid)) gid = '\''+gid;
       yOfs = yOfs * options.scale / 1000;
-      path += '<text font-size="'+fontSize+'" x="'+(x+xOfs)+'" y="'+(y-yOfs)+'" fill="'+colourText+'">'+r.g+'</text>';
+      path += '<text font-size="'+fontSize+'" x="'+(x+xOfs)+'" y="'+(y-yOfs)+'" fill="'+colourText+'">'+gid+'</text>';
       idx++;
     }
     svgPath += path;
@@ -1379,6 +1415,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-07-17 l
+</br>Tool Version: 2025-07-17 o
 </p>
 </html>
