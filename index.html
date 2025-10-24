@@ -208,6 +208,7 @@ button {
     <td class='label'>Options:</td>
     <td>
       <input type="checkbox" id="showGids"><label for="showGids">GIDs</label>
+      <input type="checkbox" id="showGidNames"><label for="showGids">Names</label>
       <input type="checkbox" id="baseLine"><label for="baseLine">Baseline</label>
       <input type="checkbox" id="showBoundingBox"><label for="showBoundingBox">Bounding Box</label>
       <input type="checkbox" id="showOrigin"><label for="showOrigin">Origins</label>
@@ -391,6 +392,11 @@ class hbSvgClass {
   getGlyphClass(gid) {
     return this.otLayout.getGlyphClass(this.otFont?.tables?.gdef?.classDef, gid);
   }
+  getGlyphName(gid) {
+    const glyphData = this.otFont?.glyphs?.get(gid);
+    if (!glyphData) return undefined;
+    return glyphData.name;
+  }
   isGlyphClassMark(gid) {
     return (this.getGlyphClass(gid) === 3);
   }
@@ -559,7 +565,24 @@ function copyTraceToClipboard(hbsvg) {
 }
 
 function getShapeResult(hbsvg) {
-  return formatJson(hbsvg.results.json || '');
+  let json = formatJson(hbsvg.results.json || '');
+  if (hbsvg.options.showGidNames) {
+    // Iterate and change the `"g":###,` -> `"g":"NAME",`
+    json = json.replaceAll(/"g":\d+,/gi, function(txt) {
+      const gid = txt.match(/\d+/);
+      const name = hbsvg.getGlyphName(Number(gid));
+      console.log(txt, gid, name);
+      if (name) {
+        if (hbsvg.options.showGids)
+          return `"g":"${gid}:${name}",`;
+        else
+          return `"g":"${name}",`;
+      } else {
+        return `"g":${gid},`;
+      }
+    });
+  }
+  return json;
 }
 
 function getShapeResultDiff(jsonThis, jsonPrev, spanStyle) {
@@ -740,6 +763,9 @@ function updateResult() {
   }
   */
   hbsvg1.options.showGids = showGids.checked;
+  hbsvg1.options.showGidNames = showGidNames.checked;
+  hbsvg2.options.showGids = showGids.checked;
+  hbsvg2.options.showGidNames = showGidNames.checked;
   if (colourGlyph.checked) hbsvg1.options.colour_mode= 1;
   if (colourCluster.checked) hbsvg1.options.colour_mode = 2;
 
@@ -775,6 +801,12 @@ function updateResult() {
   }
   fontName1.innerHTML = hbsvg1.fileDescription || '';
   fontName2.innerHTML = hbsvg2.fileDescription || '';
+
+  if (hbsvg1.getGlyphName(0)) {
+    showGidNames.disabled = false;
+  } else {
+    showGidNames.disabled = true;
+  }
 
 
   // NOTE: Origin 0,0 is top left.
@@ -838,6 +870,14 @@ function UpdateListener(id, event, foo) {
       foo(e);
     });
   }
+}
+
+function handleGidNamesChanged() {
+  if (showGidNames.checked) {
+    //showGids.checked = true;
+  }
+  updateResult();
+  updateLists();
 }
 
 /*
@@ -1284,12 +1324,23 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
         +'m'+r.dx+' '+(-r.dy)+' '   // negative y because the SVG coordinates are upside down
         +glyphSvg
         +'"/>\r\n';
-    if (options.showGids) {
-      var xOfs = 0; //r.dx
-      var fontSize = 95 * options.scale / 1000;
-      var yOfs = -650 - (idx % 5) * 100;
-      var gid = r.g;
-      if (obj.isGlyphClassMark(gid)) gid = '\''+gid;
+    if (doUpdateScrubInfo && (options.showGids || options.showGidNames)) {
+      let xOfs = 0; //r.dx
+      let fontSize = 95 * options.scale / 1000;
+      let yOfs = -650 - (idx % 5) * 100;
+      let name = obj.getGlyphName(r.g);
+      let gid = r.g;
+      const isMark = obj.isGlyphClassMark(r.g);
+      if (isMark) gid = '\''+gid;
+
+      if (options.showGidNames && name) {
+        if (options.showGids) {
+          gid = gid + ':' + name;
+        } else {
+          gid = name;
+          if (isMark) gid = `(${gid})`;
+        }
+      }
       yOfs = yOfs * options.scale / 1000;
       path += '<text font-size="'+fontSize+'" x="'+(x+xOfs)+'" y="'+(y-yOfs)+'" fill="'+colourText+'">'+gid+'</text>';
       idx++;
@@ -1401,6 +1452,7 @@ UpdateListener('colourSolid2', 'input');
 UpdateListener('solid2', 'input');
 UpdateListener('scale', 'input');
 UpdateListener('showGids', 'input');
+UpdateListener('showGidNames', 'input', handleGidNamesChanged);
 UpdateListener('features', 'input', UpdateWithTimeline);
 UpdateListener('baseLine', 'input');
 UpdateListener('showBoundingBox', 'input');
@@ -1415,6 +1467,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-07-17 o
+</br>Tool Version: 2025-10-24 n
 </p>
 </html>
