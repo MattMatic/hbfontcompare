@@ -386,8 +386,28 @@ class hbSvgClass {
     this.blob = hb.createBlob(this.fontBlob);
     this.face = hb.createFace(this.blob, 0);
     this.font = hb.createFont(this.face);
+    const debgTable = this.face.reference_table("Debg");
+    if (debgTable) {
+      this.debugInfo = JSON.parse(new TextDecoder("utf8").decode(debgTable));
+      this.debugInfo = this.debugInfo["com.github.fonttools.feaLib"];
+    } else {
+      this.debugInfo = null;
+    }
     this.otFont = opentype.parse(this.fontBlob);
     this.otLayout = new Layout(this.otFont, 'GPOS');
+  }
+  getDebugInfo(ix/*: number*/, stage/*: string*/) {
+    if (this.debugInfo && this.debugInfo[stage] && this.debugInfo[stage][ix]) {
+      const debugData = this.debugInfo[stage][ix];
+      return {
+        source: debugData[0],
+        name: debugData[1],
+        script: debugData[2] && debugData[2][0],
+        language: debugData[2] && debugData[2][1],
+        feature: debugData[2] && debugData[2][2],
+      };
+    }
+    return null;
   }
   getGlyphClass(gid) {
     return this.otLayout.getGlyphClass(this.otFont?.tables?.gdef?.classDef, gid);
@@ -571,7 +591,7 @@ function getShapeResult(hbsvg) {
     json = json.replaceAll(/"g":\d+,/gi, function(txt) {
       const gid = txt.match(/\d+/);
       const name = hbsvg.getGlyphName(Number(gid));
-      console.log(txt, gid, name);
+      //console.log(txt, gid, name);
       if (name) {
         if (hbsvg.options.showGids)
           return `"g":"${gid}:${name}",`;
@@ -802,7 +822,7 @@ function updateResult() {
   fontName1.innerHTML = hbsvg1.fileDescription || '';
   fontName2.innerHTML = hbsvg2.fileDescription || '';
 
-  if (hbsvg1.getGlyphName(0)) {
+  if (hbsvg1.getGlyphName(0) || hbsvg2.getGlyphName(0)) {
     showGidNames.disabled = false;
   } else {
     showGidNames.disabled = true;
@@ -1003,13 +1023,36 @@ function jsonToSvg(pathArray) {
 function generateHtmlForTrace(trace, index) {
   var i = index;
   var html = '';
+  let stage = '';
   if (typeof trace === 'undefined') return html;
   const message = trace[index].m;
-  if (index >= trace.gpos_point) html += 'GPOS ';
-  else if (index >= trace.gsub_point) html += 'GSUB ';
-  html += '#'+i+': ';
+  if (index >= trace.gpos_point) 
+    stage = 'GPOS';
+  else if (index >= trace.gsub_point)
+    stage += 'GSUB';
+  html += stage + ' #'+i+': ';
   html += message;
   return html;
+}
+
+function findLastLookup(trace, index) {
+  let res = {};
+  if (index >= trace.gpos_point) res.stage = 'GPOS';
+  else if (index >= trace.gsub_point) res.stage = 'GSUB';
+  while (!res.lastIndex && (index > 0)) {
+    let debugInfo = null;
+    const message = trace[index].m;
+    const m3 = message.match(/^start lookup (\d+) feature '(\w+)'/);
+    const m4 = message.match(/^recursing to lookup (\d+)/);
+    if (m3) {
+      res.lastIndex = parseInt(m3[1], 10);
+    }
+    if (m4) {
+      res.lastIndex = parseInt(m4[1], 10);
+    }
+    index--;
+  }
+  return res;
 }
 
 function generateBuffer(text, options) {
@@ -1210,7 +1253,15 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
           ' Total:'+obj.trace.count;
       } else {
         var idx = stop_count - 1; //obj.trace.length - 1;
-        scrubber_text.innerHTML = generateHtmlForTrace(obj.trace, idx);
+        let html = generateHtmlForTrace(obj.trace, idx);
+        let lastLookup = findLastLookup(obj.trace, idx);
+        if (lastLookup) {
+          const debugInfo = obj.getDebugInfo(lastLookup.lastIndex, lastLookup.stage);
+          if (debugInfo) {
+            html += `</br><font color='red'>${debugInfo.source}</font> : <b>${debugInfo.name}</b>`;
+          }
+        }
+        scrubber_text.innerHTML = html;
       }
     }
   } else {
@@ -1324,7 +1375,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
         +'m'+r.dx+' '+(-r.dy)+' '   // negative y because the SVG coordinates are upside down
         +glyphSvg
         +'"/>\r\n';
-    if (doUpdateScrubInfo && (options.showGids || options.showGidNames)) {
+    if (primary && (options.showGids || options.showGidNames)) {
       let xOfs = 0; //r.dx
       let fontSize = 95 * options.scale / 1000;
       let yOfs = -650 - (idx % 5) * 100;
@@ -1467,6 +1518,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-10-24 n
+</br>Tool Version: 2025-10-24 o
 </p>
 </html>
