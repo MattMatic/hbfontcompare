@@ -1176,6 +1176,7 @@ function findNextEvent(obj, text, startIndex, forward=true) {
   var trace = hb.shapeWithTraceLimits(font, buffer, featureString, null, null, limits, null);
   const max = trace.count;
 
+  if (startIndex < 0) startIndex = max;
   var index = startIndex;
 
   for (let i=0; i<max; i++) {
@@ -1258,7 +1259,8 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
         if (lastLookup) {
           const debugInfo = obj.getDebugInfo(lastLookup.lastIndex, lastLookup.stage);
           if (debugInfo) {
-            html += `</br><font color='red'>${debugInfo.source}</font> : <b>${debugInfo.name}</b>`;
+            const gposName = debugInfo.name ? debugInfo.name : `#${lastLookup.lastIndex}`;
+            html += `</br><font color='red'>${debugInfo.source}</font> : <b>${gposName}</b>`;
           }
         }
         scrubber_text.innerHTML = html;
@@ -1518,6 +1520,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-10-24 o
+</br>Tool Version: 2025-10-28 i
 </p>
 </html>
