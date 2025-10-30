@@ -212,6 +212,7 @@ button {
       <input type="checkbox" id="baseLine"><label for="baseLine">Baseline</label>
       <input type="checkbox" id="showBoundingBox"><label for="showBoundingBox">Bounding Box</label>
       <input type="checkbox" id="showOrigin"><label for="showOrigin">Origins</label>
+      <input type="checkbox" id="onlyGSUB"><label for="onlyGSUB">GSUB Only</label>
       <!--<input type="checkbox" id="exclusion"><label for="exclusion">Exclusion</label>-->
       <!--<input type="checkbox" id="showBbox"><label for="showBbox">Bounds</label>-->
     </td>
@@ -279,6 +280,10 @@ Promise.all(promises).then(([aharfBuzzModule]) => {
 <script type="module" src="./js/opentype.layout.gdef.mjs" async></script>
 <script>
 'use strict';
+
+var hb_stop_at = '';
+var hb_stop_phase = null;
+
 
 function isExists(v) {
   if ((typeof(v) === 'object') && (v === null)) return false;
@@ -1036,19 +1041,21 @@ function generateHtmlForTrace(trace, index) {
 }
 
 function findLastLookup(trace, index) {
-  let res = {};
+  let res = [];
+  let found = false;
   if (index >= trace.gpos_point) res.stage = 'GPOS';
   else if (index >= trace.gsub_point) res.stage = 'GSUB';
-  while (!res.lastIndex && (index > 0)) {
+  while (!found && (index > 0)) {
     let debugInfo = null;
     const message = trace[index].m;
     const m3 = message.match(/^start lookup (\d+) feature '(\w+)'/);
     const m4 = message.match(/^recursing to lookup (\d+)/);
     if (m3) {
-      res.lastIndex = parseInt(m3[1], 10);
+      res.push(parseInt(m3[1], 10));
+      found = true;
     }
     if (m4) {
-      res.lastIndex = parseInt(m4[1], 10);
+      res.push(parseInt(m4[1], 10));
     }
     index--;
   }
@@ -1173,7 +1180,7 @@ function findNextEvent(obj, text, startIndex, forward=true) {
     var featureString = `+DUMY,${options.featureString},`; // Copied from Crowbar... "SERIOUSLY?"
   }
 
-  var trace = hb.shapeWithTraceLimits(font, buffer, featureString, null, null, limits, null);
+  var trace = hb.shapeWithTraceLimits(font, buffer, featureString, null/*hb_stop_at*/, null/*hb_stop_phase*/, limits, null);
   const max = trace.count;
 
   if (startIndex < 0) startIndex = max;
@@ -1229,15 +1236,22 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
   }
   const limits = {maxGlyphRatio:100.0, maxDepth:100};
 
-  obj.trace = hb.shapeWithTraceLimits(font, buffer, featureString, null, null, limits, null);
+  let stop_count = null;
+  if (scrubber.value > 0) stop_count = scrubber.value;
+  const stop_at = (stop_count>0) ? null : hb_stop_at;
+  const stop_phase = (stop_count>0) ? null : hb_stop_phase;
+
+  obj.trace = hb.shapeWithTraceLimits(font, buffer, featureString, stop_at, stop_phase, limits, null);
 
   var result;
   if (doTimeline) {
-    var stop_count = null;
     scrubber_count.innerText = obj.trace.count;
-    if (scrubber.value > 0) stop_count = scrubber.value;
-    var buffer_trace = generateBuffer(text, options);
-    obj.trace_part = hb.shapeWithTraceLimits(font, buffer_trace, featureString, null, null, limits, stop_count);
+    let buffer_trace = generateBuffer(text, options);
+    obj.trace_part = hb.shapeWithTraceLimits(font, buffer_trace, featureString, 
+                                               stop_at, 
+                                               stop_phase,
+                                               limits,
+                                               stop_count);
     if (stop_count > 0)
       result = createResultArrayFromTrace(font, obj.trace_part, buffer_trace.json(font));
     else
@@ -1256,12 +1270,22 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
         var idx = stop_count - 1; //obj.trace.length - 1;
         let html = generateHtmlForTrace(obj.trace, idx);
         let lastLookup = findLastLookup(obj.trace, idx);
-        if (lastLookup) {
-          const debugInfo = obj.getDebugInfo(lastLookup.lastIndex, lastLookup.stage);
-          if (debugInfo) {
-            const gposName = debugInfo.name ? debugInfo.name : `#${lastLookup.lastIndex}`;
-            html += `</br><font color='red'>${debugInfo.source}</font> : <b>${gposName}</b>`;
-          }
+        if (lastLookup.length > 0) {
+          let extra_html = '</br><font color="#811">';
+          let found_debug = false;
+          lastLookup.forEach( function(v) {
+            const debugInfo = obj.getDebugInfo(v, lastLookup.stage);
+            extra_html += ` &lArr; #${v}`;
+            if (debugInfo) {
+              const gposName = debugInfo.name ? debugInfo.name : ``;
+              extra_html += `: <font color='red'>${debugInfo.source}</font> : <b>${gposName}</b></br>`;
+              found_debug = true;
+            } else {
+              //html += ``;
+            }
+          });
+          extra_html += '</font>';
+          html += extra_html;
         }
         scrubber_text.innerHTML = html;
       }
@@ -1447,6 +1471,14 @@ function UpdateScrubber(e) {
   updateResult();
 }
 
+function onlyGSUBUpdate(e) {
+  if (onlyGSUB.checked)
+    hb_stop_phase = 1;
+  else
+    hb_stop_phase = null;
+  updateResult();
+}
+
 function UpdateWithTimeline(e) {
   updateResult();
   updateLists();
@@ -1510,6 +1542,7 @@ UpdateListener('features', 'input', UpdateWithTimeline);
 UpdateListener('baseLine', 'input');
 UpdateListener('showBoundingBox', 'input');
 UpdateListener('showOrigin', 'input');
+UpdateListener('onlyGSUB', 'input', onlyGSUBUpdate);
 UpdateListener('exclusion', 'input');
 UpdateListener('scrubber', 'input', UpdateScrubber);
 resetScrubber();
@@ -1520,6 +1553,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-10-28 i
+</br>Tool Version: 2025-10-30 n
 </p>
 </html>
