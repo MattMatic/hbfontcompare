@@ -233,6 +233,7 @@ button {
   <td colspan=2>
     <input type="range" id='scrubber' name='scrubber' min=0 max=242 value=0/>
     <button id='tlPrev' onclick="timeLinePrev();">&lt;</button>
+    <button id='tlGsubEnd' onclick="timeLineGsubEnd();">|</button>
     <button id='tlNext' onclick="timeLineNext();">&gt;</button>
     <span id='scrubber_count'></span>
     </br><span class='codes' id='scrubber_text'></span>
@@ -1049,13 +1050,18 @@ function findLastLookup(trace, index) {
     let debugInfo = null;
     const message = trace[index].m;
     const m3 = message.match(/^start lookup (\d+) feature '(\w+)'/);
-    const m4 = message.match(/^recursing to lookup (\d+)/);
+    const m4 = message.match(/^recursing to lookup (\d+) at (\d+)/);
     if (m3) {
-      res.push(parseInt(m3[1], 10));
+      res.push( {
+        t: parseInt(m3[1], 10),
+      });
       found = true;
     }
     if (m4) {
-      res.push(parseInt(m4[1], 10));
+      res.push({
+        t: parseInt(m4[1], 10),
+        g: parseInt(m4[2], 10),
+      });
     }
     index--;
   }
@@ -1078,10 +1084,11 @@ function generateBuffer(text, options) {
   return buffer;
 }
 
-function transferResult(result, trace_entry, hb_entry) {
+function transferResult(result, trace_entry, hb_entry, index) {
   var re = {};
   re.g = trace_entry.g;
   re.cl = trace_entry.cl;
+  re.i = index;
   if (typeof trace_entry.ax === 'undefined') {
     re.ax = NaN; // This is picked up later and we use the glyphs max.x to advance
     re.ay = 0;
@@ -1131,7 +1138,7 @@ function createResultArrayFromTrace(font, trace, hb_result) {
     while (i < t.length) {
       const te = t[i];
       if (typeof te === 'undefined') break;
-      transferResult(result, te, hb_result[i]);
+      transferResult(result, te, hb_result[i], i);
       i++;
     }
   } else {
@@ -1140,7 +1147,7 @@ function createResultArrayFromTrace(font, trace, hb_result) {
     var hi = 0;
     while (i >= 0) {
       const te = t[i];
-      transferResult(result, te, hb_result[hi]);
+      transferResult(result, te, hb_result[hi], i);
       hi++;
       i--;
     }
@@ -1183,7 +1190,12 @@ function findNextEvent(obj, text, startIndex, forward=true) {
   var trace = hb.shapeWithTraceLimits(font, buffer, featureString, null/*hb_stop_at*/, null/*hb_stop_phase*/, limits, null);
   const max = trace.count;
 
-  if (startIndex < 0) startIndex = max;
+  if (startIndex < 0) {
+    if (forward)
+      startIndex = 0;
+    else
+      startIndex = max;
+  }
   var index = startIndex;
 
   for (let i=0; i<max; i++) {
@@ -1215,6 +1227,11 @@ function timeLinePrev() {
 
 function timeLineNext() {
   scrubber.value = findNextEvent(hbsvg1, text.value, scrubber.value-1, true)+1;
+  updateResult();
+}
+
+function timeLineGsubEnd() {
+  scrubber.value = hbsvg1.trace.gpos_point;
   updateResult();
 }
 
@@ -1274,15 +1291,25 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
           let extra_html = '</br><font color="#811">';
           let found_debug = false;
           lastLookup.forEach( function(v) {
-            const debugInfo = obj.getDebugInfo(v, lastLookup.stage);
-            extra_html += ` &lArr; #${v}`;
+            const debugInfo = obj.getDebugInfo(v.t, lastLookup.stage);
+            extra_html += ` &lArr; #${v.t}`;
             if (debugInfo) {
               const gposName = debugInfo.name ? debugInfo.name : ``;
-              extra_html += `: <font color='red'>${debugInfo.source}</font> : <b>${gposName}</b></br>`;
+              extra_html += `: <font color='red'>${debugInfo.source}</font> : <b>${gposName}</b>`;
               found_debug = true;
             } else {
-              //html += ``;
+              //
             }
+            if (typeof v.g !== 'undefined') {
+              // Find glyph index in result...
+              const gidFound = result.find((r) => (r.i == v.g));
+              const gid = gidFound?.g;
+              extra_html += ` <font color='#066'>@${v.g}=${gid}`;
+              const gidName = hbsvg1.getGlyphName(gid);
+              if (gidName) extra_html += `:${gidName}`;
+              extra_html += '</font>';
+            }
+            extra_html += '</br>';
           });
           extra_html += '</font>';
           html += extra_html;
@@ -1364,7 +1391,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
            +'x="'+(x+r.dx+ext.xl)+'" y="'+(y-r.dy-ext.yh)+'"'
            +'/>'
     }
-    if (r.H) {
+    if (r.H && primary) {
       var highlight_fill, highlight_stroke;
       if (r.H == 1) {
         highlight_fill   = '#ffff00';
@@ -1553,6 +1580,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-10-30 n
+</br>Tool Version: 2025-11-03 k
 </p>
 </html>
