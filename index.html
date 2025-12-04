@@ -1,6 +1,6 @@
 <html>
 <head>
-  <title>HarfBuzz JS Font Compare Tool</title>
+  <title>HarfBuzz Font Compare Tool</title>
   <style>
 body {
   font-family: "Calibri";
@@ -98,7 +98,7 @@ button {
   </style>
 </head>
 <meta charset="utf-8">
-<h1>HarfBuzz JS Font Compare</h1>
+<h1>HarfBuzz Font Compare</h1>
 
 <table border=1 width="100%">
   <tr>
@@ -227,6 +227,7 @@ button {
   <button id="zoomOutSVG" onclick="zoomSVG(-1);">-</button>
   <button id="zoomResetSVG" onclick="zoomSVG(0);" title="Middle click or Shift-Left and drag to pan the SVG">100%</button>
   <button id="zoomInSVG" onclick="zoomSVG(1);">+</button>
+  <font size=-1>&nbsp; Shift-Scroll to zoom. Left-Mouse to drag.</span>
 </td></tr>
 <tr>
   <td class='label'>Timeline:</td>
@@ -695,21 +696,24 @@ function zoomSVG(amount) {
 function addSVGZoomAndPan(svg){
   // From https://github.com/Holger-Will/SVGZoomAndPan/blob/master/zap.js
   svg.addEventListener("wheel",function(evt){
-    var newScale
-    if(evt.deltaY>0){newScale=svg.currentScale/1.1}
-    if(evt.deltaY<0){newScale=svg.currentScale*1.1}
-    var oldScale=svg.currentScale
-     svg.currentTranslate.x=(-evt.offsetX+svg.currentTranslate.x)*(newScale/oldScale)
-     svg.currentTranslate.y=(-evt.offsetY+svg.currentTranslate.y)*(newScale/oldScale)
-     svg.currentScale=newScale
-     svg.currentTranslate.x+=evt.offsetX
-     svg.currentTranslate.y+=evt.offsetY
-     var event = new Event('SVGZoom');
-     svg.dispatchEvent(event);
-     evt.preventDefault();  // Stop window from scrolling (update to zap.js)
+    if (evt.shiftKey) {
+      // Only zoom while the shift key is pressed (to allow scrolling the page)
+      var newScale
+      if(evt.deltaY>0){newScale=svg.currentScale/1.1}
+      if(evt.deltaY<0){newScale=svg.currentScale*1.1}
+      var oldScale=svg.currentScale
+       svg.currentTranslate.x=(-evt.offsetX+svg.currentTranslate.x)*(newScale/oldScale)
+       svg.currentTranslate.y=(-evt.offsetY+svg.currentTranslate.y)*(newScale/oldScale)
+       svg.currentScale=newScale
+       svg.currentTranslate.x+=evt.offsetX
+       svg.currentTranslate.y+=evt.offsetY
+       var event = new Event('SVGZoom');
+       svg.dispatchEvent(event);
+       evt.preventDefault();  // Stop window from scrolling (update to zap.js)
+     }
   })
   svg.addEventListener("mousedown",function(evt){
-    if(evt.shiftKey || evt.button==1){
+    if(!evt.shiftKey || evt.button==1){
       svg.classList.add("dragging")
       var ox=evt.offsetX
       var oy=evt.offsetY
@@ -1580,6 +1584,6 @@ resetScrubber();
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-11-03 k
+</br>Tool Version: 2025-12-04 n
 </p>
 </html>
