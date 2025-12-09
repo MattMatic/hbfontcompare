@@ -101,18 +101,26 @@ button {
 <h1>HarfBuzz Font Compare</h1>
 
 <table border=1 width="100%">
-  <tr>
-    <td class='label'width="10%">Text:</td>
-    <td colspan=2 id='textdrop'>
-      <input type="text" value="abc" id="text">
-      <button id="btnGotoLineFirst" onclick="gotoLineFirst();" accesskey='1' hidden>First (Alt-1)</button>
-      <button id="btnGotoLinePrev" onclick="gotoLineOfs(-1);" accesskey='2' hidden>Prev (Alt-2)</button>
-      <button id="btnGotoLineNext" onclick="gotoLineOfs(1);" accesskey='3' hidden>Next (Alt-3)</button>
-      <button id="btnGotoLineLast" onclick="gotoLineLast();" accesskey='4' hidden>Last (Alt-4)</button>
+  <tr hidden id='trNavigation'>
+    <td class='label' width='10%'>Line:</td>
+    <td>
+      <input type='text' id='inputIndex'>
+      <button id='btnGo' onclick='gotoLineIndex();'>Go</button>
+      &nbsp;
+      <button id="btnGotoLineFirst" onclick="gotoLineFirst();" accesskey='1'>First (Alt-1)</button>
+      <button id="btnGotoLinePrev" onclick="gotoLineOfs(-1);" accesskey='2'>Prev (Alt-2)</button>
+      <button id="btnGotoLineNext" onclick="gotoLineOfs(1);" accesskey='3'>Next (Alt-3)</button>
+      <button id="btnGotoLineLast" onclick="gotoLineLast();" accesskey='4'>Last (Alt-4)</button>
     </td>
   </tr>
   <tr>
-    <td class='label'width="10%">Hex:</td>
+    <td class='label' width="10%">Text:</td>
+    <td colspan=2 id='textdrop'>
+      <input type="text" value="abc" id="text">
+    </td>
+  </tr>
+  <tr>
+    <td class='label' width="10%">Hex:</td>
     <td colspan=2>
       <input type="text" size="100" value="61 62 63" id="unicode">
     </td>
@@ -150,16 +158,19 @@ button {
     <td id='dropName1'><div id='fontName1'></div></td>
     <td id='dropName2'><div id='fontName2'></div></td>
   </tr>
-  <tr><td class='label' >Scale:</td>
+  
+  <tr hidden><td class='label' >Scale:</td>
     <td colspan=1>
       <input type="range" value="1000" min="100" max="4000" step="10" id="scale" ondblclick="scale.value=1000; updateResult();">
         <label for="scale" id="scaleLabel">1000</label>
     </td>
   </tr>
+
   <tr><td class='label' >Stretch/Offset:</td>
     <td><input type="range" value="0" min="0" max="500" id="stretch"></td>
     <td><input type="range" value="0" min="0" max="4000" id="offset2"></td>
   </tr>
+
   <tr><td class='label' >Color:</td>
   <td>
     <input type="radio" id="colourGlyph"   name="colour" value="glyph">
@@ -209,6 +220,7 @@ button {
     <td>
       <input type="checkbox" id="showGids"><label for="showGids">GIDs</label>
       <input type="checkbox" id="showGidNames"><label for="showGids">Names</label>
+      <input type="checkbox" id="cbDifference" checked disabled><label for="cbDifference">Difference</label>
       <input type="checkbox" id="baseLine"><label for="baseLine">Baseline</label>
       <input type="checkbox" id="showBoundingBox"><label for="showBoundingBox">Bounding Box</label>
       <input type="checkbox" id="showOrigin"><label for="showOrigin">Origins</label>
@@ -257,8 +269,20 @@ button {
 --->
 
 <script type='module'>
+
+
+</script>
+<script type="text/javascript" src="./js/hb.js"></script> <!-- Module - REQUIRED -->
+<script type="text/javascript" src="./js/hbjs.js"></script> <!-- Wrapper, can be used without -->
+<script type="text/javascript" src="./js/otinfo.min.js"></script>
+<script type="module" src="./js/opentype.min.mjs" async></script>
+<script type="module" src="./js/opentype.layout.gdef.mjs" async></script>
+<script type="module" async>
+'use strict';
+
 import * as opentype from './js/opentype.min.mjs';
 import Layout from './js/opentype.layout.gdef.mjs';
+import {CPaths64, GlyphCompareClass} from './js/glyphcompare.mjs';
 window.opentype = opentype;
 window.Layout = Layout;
 
@@ -267,21 +291,14 @@ const promises = [
     ];
 
 let harfBuzzModule;
+var hb;
 
 Promise.all(promises).then(([aharfBuzzModule]) => {
   harfBuzzModule = aharfBuzzModule;
-  window.hb = hbjs(harfBuzzModule);
-  window.onResourcesLoaded();
+  hb = hbjs(harfBuzzModule);
+  window.hb = hb;
+  onResourcesLoaded();
 });
-
-</script>
-<script type="text/javascript" src="./js/hb.js"></script> <!-- Module - REQUIRED -->
-<script type="text/javascript" src="./js/hbjs.js"></script> <!-- Wrapper, can be used without -->
-<script type="text/javascript" src="./js/otinfo.min.js"></script>
-<script type="module" src="./js/opentype.min.mjs" async></script>
-<script type="module" src="./js/opentype.layout.gdef.mjs" async></script>
-<script>
-'use strict';
 
 var hb_stop_at = '';
 var hb_stop_phase = null;
@@ -351,6 +368,8 @@ class hbSvgClass {
     if (this.blob) { this.blob.destroy(); delete(this.blob); }
     delete(this.otLayout);
     delete(this.otFont);
+    if (this.gc) this.gc.destroy();
+    delete this.gc;
   }
   doGtable(t) {
     if (!t) return;
@@ -402,6 +421,16 @@ class hbSvgClass {
     }
     this.otFont = opentype.parse(this.fontBlob);
     this.otLayout = new Layout(this.otFont, 'GPOS');
+
+    this.gc = new GlyphCompareClass();
+    this.gc.setFontBlob(this.fontBlob);
+    this.gc.setScriptLanguage(this?.options.script, this?.options.lang);
+  }
+  setScriptLanguage(script, lang) {
+    this.options.script = script;
+    this.options.lang = lang;
+    if (this.gc)
+      this.gc.setScriptLanguage(this.options.script, this.options.lang);
   }
   getDebugInfo(ix/*: number*/, stage/*: string*/) {
     if (this.debugInfo && this.debugInfo[stage] && this.debugInfo[stage][ix]) {
@@ -431,17 +460,16 @@ class hbSvgClass {
     this.options = structuredClone(fromOptions);
   }
   toSvg(text, doTimeline, doUpdateScrubInfo) {
-    return window.hbToSvg(this, text, this.options, doTimeline, doUpdateScrubInfo);
+    return hbToSvg(this, text, this.options, doTimeline, doUpdateScrubInfo);
   }
   swapWith(other) {
-    var b1 = this.fontBlob;
-    var b2 = other.fontBlob;
+    let b1 = this.fontBlob;
+    let b2 = other.fontBlob;
     this.setFontBlob(b2);
     other.setFontBlob(b1);
   }
 }
 
-var hb;
 var hbsvg1 = new hbSvgClass();
 var hbsvg2 = new hbSvgClass();
 
@@ -461,8 +489,8 @@ function formatJson(json) {
 }
 
 function DownloadSvg() {
-  var tempLink = document.createElement("a");
-  var taBlob = new Blob([svgResult.innerHTML.replace(' height="512"', '')], { type: 'text/plain' });
+  let tempLink = document.createElement("a");
+  let taBlob = new Blob([svgResult.innerHTML.replace(' height="512"', '')], { type: 'text/plain' });
   tempLink.setAttribute('href', URL.createObjectURL(taBlob));
   tempLink.setAttribute('download', text.value + '.svg');
   tempLink.click();
@@ -470,10 +498,11 @@ function DownloadSvg() {
 }
 
 function hideTextButtons(dohide) {
-  btnGotoLineFirst.hidden = dohide;
-  btnGotoLinePrev.hidden = dohide;
-  btnGotoLineNext.hidden = dohide;
-  btnGotoLineLast.hidden = dohide;
+  //btnGotoLineFirst.hidden = dohide;
+  //btnGotoLinePrev.hidden = dohide;
+  //btnGotoLineNext.hidden = dohide;
+  //btnGotoLineLast.hidden = dohide;
+  trNavigation.hidden = dohide;
 }
 
 var lineNo = 0;
@@ -484,6 +513,7 @@ function LoadLine() {
   if (lineNo >= mya.length) lineNo = mya.length - 1;
   while ((lineNo > 0) && !mya[lineNo]) lineNo--;
   while ((lineNo < mya.length) && !mya[lineNo]) lineNo++;
+  inputIndex.value = (lineNo + 1);
   if (mya[lineNo]) {
     text.value = mya[lineNo];
     textLineInfo = '#'+(lineNo+1)+"/"+mya.length+ ' ('+textLineFileName+')';
@@ -503,6 +533,11 @@ function gotoLineOfs(ofs) {
 
 function gotoLineLast() {
   lineNo = mya.length - 1;
+  LoadLine();
+}
+
+function gotoLineIndex() {
+  lineNo = parseInt(inputIndex.value) - 1;
   LoadLine();
 }
 
@@ -535,10 +570,10 @@ function updateLists() {
   if (fontInfo.scripts.size > 0) {
     scriptList.innerText = '"'+[...fontInfo.scripts].sort().join('", "')+'"';
   }
-  var languages = fontInfo.languages;
+  let languages = fontInfo.languages;
 
   if (script.value !== '') {
-    var theScript = script.value.toLowerCase();
+    let theScript = script.value.toLowerCase();
     languages = new Set();
     iterateGtable(fontInfo.GSUB, theScript, languages);
     iterateGtable(fontInfo.GPOS, theScript, languages);
@@ -552,7 +587,7 @@ function updateLists() {
 }
 
 function getHarfBuzzResult(hbsvg) {
-  var txt = ''
+  let txt = ''
   if (hbsvg.trace.limits.maxGlyphAbort) txt += "<font color='red'>!GLYPH COUNT! "+hbsvg.trace.limits.maxGlyph+"</font></br>\r\n";
   if (hbsvg.trace.limits.maxDepthAbort) txt += "<font color='red'>!GSUB/GPOS DEPTH!</font></br>\r\n" + txt;
   if (hbsvg.trace && hbsvg.trace.limits) {
@@ -562,7 +597,7 @@ function getHarfBuzzResult(hbsvg) {
 }
 
 function getTraceJSON(hbsvg) {
-  var txt = '';
+  let txt = '';
   txt += '{"font":"'+hbsvg.fileDescription+'",\r\n'+
          ' "text":"'+text.value+'",\r\n'+
          ' "script":"'+script.value+'",\r\n'+
@@ -617,7 +652,7 @@ function getShapeResultDiff(jsonThis, jsonPrev, spanStyle) {
   if (!jsonThis || (jsonThis === '')) return jsonThis;
   const linesThis = jsonThis.split('\r\n');
   const linesPrev = jsonPrev.split('\r\n');
-  var res = '';
+  let res = '';
   const size = linesThis.length;
   for (let i=0; i<size; i++) {
     const lineThis = linesThis[i];
@@ -625,11 +660,11 @@ function getShapeResultDiff(jsonThis, jsonPrev, spanStyle) {
     if ((lineThis !== linePrev) && lineThis && linePrev && (lineThis !== '') && (linePrev !== '')) {
       const valsThis = linesThis[i].split(',"');
       const valsPrev = linesPrev[i].split(',"');
-      var l = '';
+      let l = '';
       const n = valsThis.length;
       for (let ii=0; ii<n; ii++) {
-        var vThis = valsThis[ii];
-        var vPrev = valsPrev[ii];
+        let vThis = valsThis[ii];
+        let vPrev = valsPrev[ii];
         if (vThis !== vPrev) {
           if (vThis.startsWith('{')) {
             l += '{';
@@ -655,10 +690,10 @@ function getShapeResultDiff(jsonThis, jsonPrev, spanStyle) {
 }
 
 function updateSvg(dive, html) {
-  var oldScale = 1;
-  var oldTranslate = {x:0, y:0};
+  let oldScale = 1;
+  let oldTranslate = {x:0, y:0};
 
-  var svge = dive.children[0];
+  let svge = dive.children[0];
   if (typeof svge !== 'undefined') {
     oldScale = svge.currentScale;
     oldTranslate = svge.currentTranslate;
@@ -671,12 +706,12 @@ function updateSvg(dive, html) {
 }
 
 function adjustSVGzoom(svge, amount) {
-  var newScale
+  let newScale
   if (amount < 0){newScale=svge.currentScale/1.1}
   if (amount > 0){newScale=svge.currentScale*1.1}
   if (amount ==0){newScale=1}
-  var oldScale=svge.currentScale
-  var y = svge.clientHeight / 2;
+  let oldScale=svge.currentScale
+  let y = svge.clientHeight / 2;
   svge.currentTranslate.y=(-y+svge.currentTranslate.y)*(newScale/oldScale)
   svge.currentTranslate.x=(0+svge.currentTranslate.x)*(newScale/oldScale)
   svge.currentScale=newScale
@@ -698,16 +733,16 @@ function addSVGZoomAndPan(svg){
   svg.addEventListener("wheel",function(evt){
     if (evt.shiftKey) {
       // Only zoom while the shift key is pressed (to allow scrolling the page)
-      var newScale
+      let newScale
       if(evt.deltaY>0){newScale=svg.currentScale/1.1}
       if(evt.deltaY<0){newScale=svg.currentScale*1.1}
-      var oldScale=svg.currentScale
+      let oldScale=svg.currentScale
        svg.currentTranslate.x=(-evt.offsetX+svg.currentTranslate.x)*(newScale/oldScale)
        svg.currentTranslate.y=(-evt.offsetY+svg.currentTranslate.y)*(newScale/oldScale)
        svg.currentScale=newScale
        svg.currentTranslate.x+=evt.offsetX
        svg.currentTranslate.y+=evt.offsetY
-       var event = new Event('SVGZoom');
+       let event = new Event('SVGZoom');
        svg.dispatchEvent(event);
        evt.preventDefault();  // Stop window from scrolling (update to zap.js)
      }
@@ -715,36 +750,94 @@ function addSVGZoomAndPan(svg){
   svg.addEventListener("mousedown",function(evt){
     if(!evt.shiftKey || evt.button==1){
       svg.classList.add("dragging")
-      var ox=evt.offsetX
-      var oy=evt.offsetY
-      var otx=svg.currentTranslate.x
-      var oty=svg.currentTranslate.y
+      let ox=evt.offsetX
+      let oy=evt.offsetY
+      let otx=svg.currentTranslate.x
+      let oty=svg.currentTranslate.y
       svg.addEventListener("mousemove",move)
       document.addEventListener("mouseup",out)
-      var event = new Event('SVGScroll');
+      let event = new Event('SVGScroll');
       svg.dispatchEvent(event)
       function out(evt){
         svg.removeEventListener("mousemove",move)
         document.removeEventListener("mouseup",out)
         svg.classList.remove("dragging")
-        var event = new Event('SVGScroll');
+        let event = new Event('SVGScroll');
         svg.dispatchEvent(event)
       }
       function move(evt){
         svg.currentTranslate.x=otx+(evt.offsetX-ox)
         svg.currentTranslate.y=oty+(evt.offsetY-oy)
-        var event = new Event('SVGScroll');
+        let event = new Event('SVGScroll');
         svg.dispatchEvent(event)
       }
     }
   })
 }
 
+class pathToSvg {
+  constructor() {
+    this.svgData = '';
+  }
+  genSVGPath(p64, settings) {
+    const size = p64.size();
+    for (let i=0;i<size;i++) {
+      const point = p64.get(i);
+      const x= Number(point.x) *  1;
+      const y= Number(point.y) * -1;
+      if (i==0)
+        this.svgData += `M${x},${y}`;
+      else
+        this.svgData += `L${x},${y}`;
+      point.delete(); //??
+    }
+    this.svgData += 'z';
+  }
+  genSVGPaths(ps64, settings) {
+    if (!ps64) return;
+    settings = settings || {};
+    if (!isExists(settings.mixBlendMode)) settings.mixBlendMode = 'normal';
+    this.svgData += '<path ';
+    if (settings.id) {
+      this.svgData += `id="${settings.id}" `;
+    }
+    this.svgData += ' style="';
+    if (isExists(settings.fillColor)) {
+      if (!isExists(settings.fillOpacity)) settings.fillOpacity = 0.5;
+      this.svgData += 'fill:'+settings.fillColor
+                    +';fill-opacity:'+settings.fillOpacity
+    } else {
+      this.svgData += ';fill-opacity:0';
+    }
+    if (isExists(settings.strokeColor)) {
+      if (!isExists(settings.strokeOpacity)) settings.strokeOpacity = 1.0;
+      if (!isExists(settings.strokeWidth)) settings.strokeWidth = 2;
+      this.svgData += ';stroke:'+settings.strokeColor
+                    +';stroke-opacity:'+settings.strokeOpacity
+                    +';stroke-width:'+settings.strokeWidth
+                    +';stroke-linejoin=\'round\''
+    }
+    if (settings.mixBlendMode !== 'normal')
+      this.svgData +=';mix-blend-mode:\''+settings.mixBlendMode+'\''
+    
+    this.svgData += '" d="';
+    const size = ps64.size();
+    for (let i=0;i<size;i++) {
+      const path = ps64.get(i);
+      this.genSVGPath(path, settings);
+      path.delete();
+    }
+    this.svgData += '"/>\r\n';
+    return this.svgData;
+  }
+}
+
 
 function updateResult() {
   scaleLabel.innerText = scale.value;
 
-  var svgPath = '';
+  let svgPath = '';
+  const txt = text.value;
 
   /*
   if (exclusion.checked) {
@@ -803,22 +896,46 @@ function updateResult() {
   hbsvg1.options.opacity_stroke = opacityStroke.value;
   hbsvg1.options.stroke_width = strokeWidth.value;
 
+  let svg1 = '';
+  let svg2 = '';
+  if (hbsvg2.fontBlob) svg2 = hbsvg2.toSvg(txt, true, false);
+  if (hbsvg1.fontBlob) svg1 = hbsvg1.toSvg(txt, true, true);
+
+  if (hbsvg1.gc && hbsvg2.gc && !cbDifference.disabled && cbDifference.checked) {
+    // Render a difference highlight
+    let featureString = features.value || '';
+    if (featureString && featureString.length > 0) {
+      featureString = `+DUMY,${featureString},`; // Copied from Crowbar... "SERIOUSLY?"
+    }
+    //let json1 = hbsvg1.gc.shape(txt, featureString);
+    //let json2 = hbsvg2.gc.shape(txt, featureString);
+    const json1 = hbsvg1.results.json; // Take the already calculated ones that include the timeline
+    const json2 = hbsvg2.results.json;
+    let p1 = hbsvg1.gc.toPath(json1, {stretch:hbsvg2.options.x_stretch});
+    let p2 = hbsvg2.gc.toPath(json2, {stretch:hbsvg2.options.x_stretch});
+    let po = hbsvg1.gc.overlapToCPaths64(hbsvg2.gc);
+    let p2svg = new pathToSvg();
+    svgPath += p2svg.genSVGPaths(po.paths64, {strokeColor:'#2f4', strokeWidth:151, strokeOpacity:0.7, fillColor:'#2f4', fillOpacity:0.1});
+    po.destroy();
+    p2.destroy();
+    p1.destroy();
+  }
 
   if (hbsvg2.fontBlob) {
-    svgPath += hbsvg2.toSvg(text.value, true, false);
+    svgPath += svg2;
     harfBuzzResult2.innerHTML = getHarfBuzzResult(hbsvg2);
   } else {
     harfBuzzResult2.innerHTML = '';
   }
   if (hbsvg1.fontBlob) {
-    svgPath += hbsvg1.toSvg(text.value, true, true);
+    svgPath += svg1;
     harfBuzzResult1.innerHTML = getHarfBuzzResult(hbsvg1);
   } else {
     harfBuzzResult1.innerHTML = '';
   }
 
-  var hbsgv1_json = getShapeResult(hbsvg1);
-  var hbsgv2_json = getShapeResult(hbsvg2);
+  let hbsgv1_json = getShapeResult(hbsvg1);
+  let hbsgv2_json = getShapeResult(hbsvg2);
   if (hbsvg2.fontBlob) {
     shapeResult2.innerHTML = getShapeResultDiff(hbsgv2_json, hbsgv1_json, 'diff2');
   } else {
@@ -840,15 +957,15 @@ function updateResult() {
 
 
   // NOTE: Origin 0,0 is top left.
-  var xmin = -250;    // Space to the LEFT
-  var ymin = -1800;   // Space ABOVE
-  var height = 3000;
-  var heightOut = 400;
-  var width = (window.innerWidth) * height / heightOut * 0.95;
+  let xmin = -250;    // Space to the LEFT
+  let ymin = -1800;   // Space ABOVE
+  let height = 3000;
+  let heightOut = 400;
+  let width = (window.innerWidth) * height / heightOut * 0.95;
 
-  var bbox = xmin + ' ' + ymin + ' ' + width + ' ' + height;
+  let bbox = xmin + ' ' + ymin + ' ' + width + ' ' + height;
 
-  var ih = '<svg xmlns="http://www.w3.org/2000/svg"'
+  let ih = '<svg xmlns="http://www.w3.org/2000/svg"'
     +' height="'+heightOut+'"'
     +' viewBox="' + bbox + '"'
     +'>';
@@ -857,14 +974,14 @@ function updateResult() {
   }
   ih += svgPath + '</svg>';
   updateSvg(svgResult, ih);
-  var svge = svgResult.children[0];
+  let svge = svgResult.children[0];
   addSVGZoomAndPan(svge);
   //debugResult.innerText = 'upem='+hbsvg1.face.upem;
 }
 
 function onResourcesLoaded() {
-  hbversion.innerHTML=hb.version_string()
-  var fontname = 'samples/Gulzar-Regular-1.002.ttf';
+  document.getElementById('hbversion').innerHTML = hb.version_string()
+  let fontname = 'samples/Gulzar-Regular-1.002.ttf';
   fetch(fontname).then(function (res) {
     return res.arrayBuffer();
   }).then(function (blob) { // can be used without our wrapper
@@ -888,7 +1005,7 @@ createHarfBuzz().then(hbmodule=>{
 */
 
 function UpdateListener(id, event, foo) {
-  var e = document.getElementById(id);
+  let e = document.getElementById(id);
   if (e && !foo) {
     e.addEventListener(event, function(e) {
       updateResult();
@@ -927,7 +1044,7 @@ document.addEventListener('drop', function (e) {
 
 function handleFontUpdate(file, which) {
   if (!file) return;
-  var reader = new FileReader();
+  let reader = new FileReader();
   reader.addEventListener("load", function () {
     window.fontBlob = new Uint8Array(reader.result);
     if (!which) {
@@ -938,10 +1055,11 @@ function handleFontUpdate(file, which) {
     } else {
       which.setFontBlob(window.fontBlob);
     }
+    cbDifference.disabled = !((hbsvg1.gc) && (hbsvg2.gc));
     updateResult();
     updateLists();
   });
-  var fdate = new Date(file.lastModified);
+  let fdate = new Date(file.lastModified);
   reader.readAsArrayBuffer(file);
 }
 
@@ -951,7 +1069,7 @@ function handleTextDrop(file) {
   console.log(fileName);
   textLineFileName = fileName;
   if (!fileName.endsWith('.txt')) return;
-  var reader = new FileReader();
+  let reader = new FileReader();
   reader.onload = function(e) {
     updateTextLines(reader.result);
     hideTextButtons(false);
@@ -973,13 +1091,13 @@ patchDragDrop(document.getElementById('textdrop'), handleTextDrop);
 // extxy - gets filled with the maximum extents .x and .y of the glyph
 //         so can be used for advance in the GSUB stage (where there's no metrics yet available)
 function glyphToRelative(glyph, retxy, extxy) {
-  var r = [];
-  var x = 0;
-  var y = 0;
-  var last_x, last_y;
-  var ext = {xl:null, yl:null, xh:null, yh:null};
-  var res = glyph.reduce( (acc,w) => {
-    var v = {};
+  let r = [];
+  let x = 0;
+  let y = 0;
+  let last_x, last_y;
+  let ext = {xl:null, yl:null, xh:null, yh:null};
+  let res = glyph.reduce( (acc,w) => {
+    let v = {};
     v.type = w.type.toLowerCase();
     v.values = w.values.map( function(z, i) {
       if (i%2)
@@ -1002,7 +1120,7 @@ function glyphToRelative(glyph, retxy, extxy) {
   }, []);
   // Go back to relative origin...
   if (retxy) {
-    var v = {}
+    let v = {}
     v.type = 'm';
     v.values = [-x, y];
     res.push(v);
@@ -1023,16 +1141,16 @@ function glyphToRelative(glyph, retxy, extxy) {
 }
 
 function jsonToSvg(pathArray) {
-  var res = pathArray.reduce( (acc, gl) => {
-    var v = gl.type + gl.values.join(' ');
+  let res = pathArray.reduce( (acc, gl) => {
+    let v = gl.type + gl.values.join(' ');
     return acc.concat(v);
   }, '');
   return res;
 }
 
 function generateHtmlForTrace(trace, index) {
-  var i = index;
-  var html = '';
+  let i = index;
+  let html = '';
   let stage = '';
   if (typeof trace === 'undefined') return html;
   const message = trace[index].m;
@@ -1073,7 +1191,7 @@ function findLastLookup(trace, index) {
 }
 
 function generateBuffer(text, options) {
-  var buffer = hb.createBuffer();
+  let buffer = hb.createBuffer();
   buffer.addText(text);
   buffer.guessSegmentProperties();
   if (options.direction && options.direction.length > 0) {
@@ -1089,7 +1207,7 @@ function generateBuffer(text, options) {
 }
 
 function transferResult(result, trace_entry, hb_entry, index) {
-  var re = {};
+  let re = {};
   re.g = trace_entry.g;
   re.cl = trace_entry.cl;
   re.i = index;
@@ -1115,18 +1233,18 @@ function createResultArrayFromTrace(font, trace, hb_result) {
   //       compared to the trace.cl
   // NOTE: in the case of a GSUB sequence, we can take the ax,ay,dx,dy from the hb_result
   //       to show meaningful info (that HarfBuzz has slightly cooked)
-  var result = [];
+  let result = [];
   const tr = trace[trace.length - 1];
   const t = tr.t;
   if (typeof t === 'undefined') return result;
 
   // Scan for ' at ...' in the tr.m field
-  var sets = tr.m.match(/ at [\d,]+/g);
+  let sets = tr.m.match(/ at [\d,]+/g);
   if (sets !== null) {
-    var i = 0;
+    let i = 0;
     while (i < sets.length) {
       const indices = sets[i].match(/\d+/g);
-      var j = 0;
+      let j = 0;
       while (j < indices.length) {
         const n = parseInt(indices[j], 10);
         t[n].H = i+1;
@@ -1138,7 +1256,7 @@ function createResultArrayFromTrace(font, trace, hb_result) {
 
   if (hb_result[0].cl == t[0].cl) {
     // Same direction
-    var i = 0;
+    let i = 0;
     while (i < t.length) {
       const te = t[i];
       if (typeof te === 'undefined') break;
@@ -1147,8 +1265,8 @@ function createResultArrayFromTrace(font, trace, hb_result) {
     }
   } else {
     // Need to reverse
-    var i = t.length - 1;
-    var hi = 0;
+    let i = t.length - 1;
+    let hi = 0;
     while (i >= 0) {
       const te = t[i];
       transferResult(result, te, hb_result[hi], i);
@@ -1181,17 +1299,17 @@ function findNextEvent(obj, text, startIndex, forward=true) {
   if (!("blob" in obj)) obj.blob = hb.createBlob(obj.fontBlob);
   if (!("face" in obj)) obj.face = hb.createFace(obj.blob, 0);
   if (!("font" in obj)) obj.font = hb.createFont(obj.face);
-  var font = obj.font;
+  const font = obj.font;
   const limits = {maxGlyphRatio:100.0, maxDepth:100};
-  var options = obj.options;
+  let options = obj.options;
 
-  var buffer = generateBuffer(text, options);
-  var featureString = '';
+  let buffer = generateBuffer(text, options);
+  let featureString = '';
   if (options.featureString && options.featureString.length > 0) {
-    var featureString = `+DUMY,${options.featureString},`; // Copied from Crowbar... "SERIOUSLY?"
+    featureString = `+DUMY,${options.featureString},`; // Copied from Crowbar... "SERIOUSLY?"
   }
 
-  var trace = hb.shapeWithTraceLimits(font, buffer, featureString, null/*hb_stop_at*/, null/*hb_stop_phase*/, limits, null);
+  let trace = hb.shapeWithTraceLimits(font, buffer, featureString, null/*hb_stop_at*/, null/*hb_stop_phase*/, limits, null);
   const max = trace.count;
 
   if (startIndex < 0) {
@@ -1200,7 +1318,7 @@ function findNextEvent(obj, text, startIndex, forward=true) {
     else
       startIndex = max;
   }
-  var index = startIndex;
+  let index = startIndex;
 
   for (let i=0; i<max; i++) {
     const t = trace[i];
@@ -1245,15 +1363,15 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
   if (!("blob" in obj)) obj.blob = hb.createBlob(obj.fontBlob);
   if (!("face" in obj)) obj.face = hb.createFace(obj.blob, 0);
   if (!("font" in obj)) obj.font = hb.createFont(obj.face);
-  var font = obj.font;
+  let font = obj.font;
   const primary = doUpdateScrubInfo; //(obj == hbsvg1);
   if ("scale" in options)
     font.setScale(options.scale, options.scale); // Optional, if not given will be in font upem
 
-  var buffer = generateBuffer(text, options);
-  var featureString = '';
+  let buffer = generateBuffer(text, options);
+  let featureString = '';
   if (options.featureString && options.featureString.length > 0) {
-    var featureString = `+DUMY,${options.featureString},`; // Copied from Crowbar... "SERIOUSLY?"
+    featureString = `+DUMY,${options.featureString},`; // Copied from Crowbar... "SERIOUSLY?"
   }
   const limits = {maxGlyphRatio:100.0, maxDepth:100};
 
@@ -1264,7 +1382,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
 
   obj.trace = hb.shapeWithTraceLimits(font, buffer, featureString, stop_at, stop_phase, limits, null);
 
-  var result;
+  let result;
   if (doTimeline) {
     scrubber_count.innerText = obj.trace.count;
     let buffer_trace = generateBuffer(text, options);
@@ -1288,7 +1406,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
           ' GPOS:'+obj.trace.gpos_point +
           ' Total:'+obj.trace.count;
       } else {
-        var idx = stop_count - 1; //obj.trace.length - 1;
+        let idx = stop_count - 1; //obj.trace.length - 1;
         let html = generateHtmlForTrace(obj.trace, idx);
         let lastLookup = findLastLookup(obj.trace, idx);
         if (lastLookup.length > 0) {
@@ -1326,8 +1444,8 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
   }
 
   // returns glyphs paths, totally optional
-  var glyphs = {};
-  //var paths  = {};
+  let glyphs = {};
+  //let paths  = {};
   result.forEach(function (x) {
     if (glyphs[x.g]) return;
     glyphs[x.g] = font.glyphToJson(x.g);
@@ -1335,26 +1453,26 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
   });
   buffer.destroy();
 
-  var opacf = options.opacity_fill; // || 0.7
-  var opacs = options.opacity_stroke;// || 0.3;
-  var stroke_width = options.stroke_width || 11;
-  var x_stretch = options.x_stretch || 0;
-  var svgPath = '';
-  var x = options.x || 0;
-  var y = options.y || 0;
-  var colour_i = 0;
-  var cluster_n = -1;
-  var colour_mode = options.colour_mode || 0;
-  var colour_solid = options.colour_solid || '#f37418'; // #0523d4 (blue)
-  var r;
-  var idx = 0;
-  var n = 0;
+  let opacf = options.opacity_fill; // || 0.7
+  let opacs = options.opacity_stroke;// || 0.3;
+  let stroke_width = options.stroke_width || 11;
+  let x_stretch = options.x_stretch || 0;
+  let svgPath = '';
+  let x = options.x || 0;
+  let y = options.y || 0;
+  let colour_i = 0;
+  let cluster_n = -1;
+  let colour_mode = options.colour_mode || 0;
+  let colour_solid = options.colour_solid || '#f37418'; // #0523d4 (blue)
+  let r;
+  let idx = 0;
+  let n = 0;
 
   for (r of result) {
-    var colourGlyph = colour_solid;
-    var colourStroke = colour_solid;
-    var colourText = colour_solid;
-    var colourExtents = colour_solid;
+    let colourGlyph = colour_solid;
+    let colourStroke = colour_solid;
+    let colourText = colour_solid;
+    let colourExtents = colour_solid;
     if (!colour_mode == 0)
     {
       if (colour_mode == 1) {
@@ -1376,8 +1494,8 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
       colourText    = colourStroke;
       colourExtents = colourStroke;
     }
-    var blendMode = options.blendMode || 'normal';
-    var ext = {};
+    let blendMode = options.blendMode || 'normal';
+    let ext = {};
     const glyphSvg = jsonToSvg(glyphToRelative(glyphs[r.g], false, ext));
     if (isNaN(r.ax)) {
       // for GSUB phase where there's no advance
@@ -1386,7 +1504,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
       if (ext.xl < 0) r.dx = -ext.xl
       if (ext.xh > ext.w) r.ax = ext.xh; else r.ax = ext.w;
     }
-    var path = '';
+    let path = '';
     if (showBoundingBox.checked && primary) {
       path += '<rect style="fill:'+colourExtents
            +';fill-opacity:0.15;mix-blend-mode:\'multiply\'" '
@@ -1396,7 +1514,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
            +'/>'
     }
     if (r.H && primary) {
-      var highlight_fill, highlight_stroke;
+      let highlight_fill, highlight_stroke;
       if (r.H == 1) {
         highlight_fill   = '#ffff00';
         highlight_stroke = '#ff0000';
@@ -1467,13 +1585,13 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
 
 function textToUnicode(str) {
   return str.split('').map(function (value, index, array) {
-    var temp = value.charCodeAt(0).toString(16); //.toUpperCase();
+    let temp = value.charCodeAt(0).toString(16); //.toUpperCase();
     return temp;
   }).join(' ');
 }
 
 function unicodeToText(uni, maxLength) {
-  var txt = uni.split(' ').map(function(value, index, array) {
+  let txt = uni.split(' ').map(function(value, index, array) {
     if (value.length == 0) return '';
     return String.fromCharCode('0x'+value);
   }).join('');
@@ -1531,7 +1649,7 @@ function updateTransfer(xfer) {
   if (isExists(xfer.fontBlob2)) hbsvg2.setFontBlob(xfer.fontBlob2);
   if (isExists(xfer.checkList) && (xfer.checkList.length > 0)) {
     mya = [];
-    var i = 0;
+    let i = 0;
     while (i < xfer.checkList.length) {
       mya.push(xfer.checkList[i]);
       i++;
@@ -1541,6 +1659,12 @@ function updateTransfer(xfer) {
   if (xfer.script !== null)   script.value   = xfer.script;
   if (xfer.language !== null) language.value = xfer.language;
   gotoLineFirst();
+}
+
+function indexKeyDown(event) {
+  if (event.code == 'Enter') {
+    gotoLineIndex();
+  }
 }
 
 // Glue update events...
@@ -1571,19 +1695,35 @@ UpdateListener('showGids', 'input');
 UpdateListener('showGidNames', 'input', handleGidNamesChanged);
 UpdateListener('features', 'input', UpdateWithTimeline);
 UpdateListener('baseLine', 'input');
+UpdateListener('cbDifference', 'input');
 UpdateListener('showBoundingBox', 'input');
 UpdateListener('showOrigin', 'input');
 UpdateListener('onlyGSUB', 'input', onlyGSUBUpdate);
 UpdateListener('exclusion', 'input');
 UpdateListener('scrubber', 'input', UpdateScrubber);
+UpdateListener('inputIndex', 'keydown', indexKeyDown);
 resetScrubber();
 
+// Expose these to the window
+window.zoomSVG = zoomSVG;
+window.DownloadSvg = DownloadSvg;
+window.copyTraceToClipboard = copyTraceToClipboard;
+window.gotoLineFirst = gotoLineFirst;
+window.gotoLineOfs = gotoLineOfs;
+window.gotoLineLast = gotoLineLast;
+window.gotoLineIndex = gotoLineIndex;
+window.SwapFonts = SwapFonts;
+window.ResetFontTwo = ResetFontTwo;
+window.timeLinePrev = timeLinePrev;
+window.timeLineGsubEnd = timeLineGsubEnd;
+window.timeLineNext = timeLineNext;
+window.updateResult = updateResult;
 </script>
 
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-12-04 n
+</br>Tool Version: 2025-12-09 n
 </p>
 </html>

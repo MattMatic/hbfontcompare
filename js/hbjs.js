@@ -686,6 +686,14 @@ function hbjs(Module) {
     shapeWithTraceLimits : shapeWithTraceLimits,
     version: version,
     version_string: version_string,
+
+    hooks: {
+      exports: exports,
+      addFunction: addFunction,
+      removeFunction: removeFunction,
+      utf8Decoder: utf8Decoder,
+      Module: Module,
+    }
   };
 }
 
