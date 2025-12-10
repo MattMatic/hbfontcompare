@@ -833,6 +833,10 @@ class pathToSvg {
 }
 
 
+function updateControls() {
+  cbDifference.disabled = !((hbsvg1.gc) && (hbsvg2.gc));  
+}
+
 function updateResult() {
   scaleLabel.innerText = scale.value;
 
@@ -1055,7 +1059,7 @@ function handleFontUpdate(file, which) {
     } else {
       which.setFontBlob(window.fontBlob);
     }
-    cbDifference.disabled = !((hbsvg1.gc) && (hbsvg2.gc));
+    updateControls();
     updateResult();
     updateLists();
   });
@@ -1658,6 +1662,7 @@ function updateTransfer(xfer) {
   }
   if (xfer.script !== null)   script.value   = xfer.script;
   if (xfer.language !== null) language.value = xfer.language;
+  updateControls();
   gotoLineFirst();
 }
 
@@ -1718,12 +1723,13 @@ window.timeLinePrev = timeLinePrev;
 window.timeLineGsubEnd = timeLineGsubEnd;
 window.timeLineNext = timeLineNext;
 window.updateResult = updateResult;
+window.updateTransfer = updateTransfer;
 </script>
 
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-12-09 n
+</br>Tool Version: 2025-12-10 q
 </p>
 </html>
