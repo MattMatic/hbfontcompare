@@ -94,6 +94,9 @@ button {
   width: 80%;
   margin: 0;
 }
+#cbHarfBuzzVersion {
+  background-color: #f0f8f0;
+}
 
   </style>
 </head>
@@ -268,16 +271,34 @@ button {
 <p>Debug3:<div id="debugResult3"></div></p>
 --->
 
-<script type='module'>
-
-
-</script>
-<script type="text/javascript" src="./js/hb.js"></script> <!-- Module - REQUIRED -->
+<!--<script type="text/javascript" src="./js/hb.js"></script>--> <!-- Module - REQUIRED -->
 <script type="text/javascript" src="./js/hbjs.js"></script> <!-- Wrapper, can be used without -->
+<script high>
+// Dynamically load `hb.js` and `hb.wasm` based on query string `?hb=11.0.1`
+const params = new URL(document.location.toString()).searchParams;
+let hb_version = params.get('hb');
+if (!hb_version) hb_version = '11.0.1';
+const hbv_validate = /^\d\d\.\d\.\d$/g;
+if (hb_version.match(hbv_validate)) {
+  const scriptSource = `./js/hbjs-${hb_version}/hb.js`;
+  const newScriptElement = document.createElement('script');
+  newScriptElement.onload = function() {
+    console.log('loaded ', scriptSource);
+  };
+  newScriptElement.onerror = function() {
+    document.getElementById('hbversion').innerHTML = `<font size=+5 color='red'>MISSING ${hb_version}</font>`;
+  };
+  newScriptElement.src = scriptSource;
+  document.head.appendChild(newScriptElement);
+} else {
+  window.alert(`Illegal version\r\n"${hb_version}"`);
+}
+</script>
+
 <script type="text/javascript" src="./js/otinfo.min.js"></script>
 <script type="module" src="./js/opentype.min.mjs" async></script>
 <script type="module" src="./js/opentype.layout.gdef.mjs" async></script>
-<script type="module" async>
+<script type="module" async defer>
 'use strict';
 
 import * as opentype from './js/opentype.min.mjs';
@@ -984,7 +1005,7 @@ function updateResult() {
 }
 
 function onResourcesLoaded() {
-  document.getElementById('hbversion').innerHTML = hb.version_string()
+  //document.getElementById('hbversion').innerHTML = hb.version_string()
   let fontname = 'samples/Gulzar-Regular-1.002.ttf';
   fetch(fontname).then(function (res) {
     return res.arrayBuffer();
@@ -995,6 +1016,7 @@ function onResourcesLoaded() {
     acquireFontAndLists(window.opener);
     updateResult();
     updateLists();
+    populateHarfBuzzVersionChoice();
   });
 }
 
@@ -1724,12 +1746,49 @@ window.timeLineGsubEnd = timeLineGsubEnd;
 window.timeLineNext = timeLineNext;
 window.updateResult = updateResult;
 window.updateTransfer = updateTransfer;
+
+function hbVersionChange(event) {
+  let url = new URL(document.location.toString());
+  url.search = `?hb=${cbHarfBuzzVersion.value}`;
+  window.location.replace(url.href);
+}
+
+function populateHarfBuzzVersionChoice() {
+  const hbVersionsAvailable = [
+    '12.0.0',
+    '11.5.0',
+    '11.4.5',
+    //'11.4.4',
+    //'11.4.1',
+    '11.3.3',
+    '11.0.1',
+  ];
+  let html = '<select name="hbVersion" id="cbHarfBuzzVersion">\r\n';
+  let knownVersion = false;
+  hbVersionsAvailable.forEach(v=> {
+    const thisVersion = (hb_version == v);
+    if (thisVersion) knownVersion = true;
+    html += `<option value="${v}"${thisVersion?" selected":""}>${v}</option>\r\n`;    
+  });
+  html += '</select>';
+  if (!knownVersion) {
+    const hbv = hb.version_string();
+    if (hbv) {
+      hbversion.innerHTML = hbv;
+    }
+  }
+  hbVersionChoice.innerHTML = html;
+  UpdateListener('cbHarfBuzzVersion', 'change', hbVersionChange);
+}
+
+//populateHarfBuzzVersionChoice();
+
 </script>
 
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
-</br>HarfBuzz Version: <span id="hbversion"></span>
-</br>Tool Version: 2025-12-10 q
+</br>HarfBuzz Version: <span id="hbversion"></span> <span id='hbVersionChoice'>fillmein</span>
+</br>Tool Version: 2025-12-18 l
 </p>
 </html>

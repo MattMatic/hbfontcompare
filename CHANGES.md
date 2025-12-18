@@ -1,5 +1,8 @@
 # Change Notes
 
+## 2025-12-18
+- Add choice of HarfBuzz versions
+
 ## 2025-12-10
 - Fix transfer issues from Font Compare Word List
 
