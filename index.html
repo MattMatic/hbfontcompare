@@ -313,6 +313,7 @@ const promises = [
 
 let harfBuzzModule;
 var hb;
+var hbBrowserMode = false;
 
 Promise.all(promises).then(([aharfBuzzModule]) => {
   harfBuzzModule = aharfBuzzModule;
@@ -1407,16 +1408,22 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
   const stop_phase = (stop_count>0) ? null : hb_stop_phase;
 
   obj.trace = hb.shapeWithTraceLimits(font, buffer, featureString, stop_at, stop_phase, limits, null);
-
+  
   let result;
+  // NOTE: doTimeline is currently always true ;-)
   if (doTimeline) {
     scrubber_count.innerText = obj.trace.count;
     let buffer_trace = generateBuffer(text, options);
-    obj.trace_part = hb.shapeWithTraceLimits(font, buffer_trace, featureString, 
-                                               stop_at, 
-                                               stop_phase,
-                                               limits,
-                                               stop_count);
+    if (hbBrowserMode && !stop_count) {
+      obj.trace_part = hb.shape(font, buffer_trace, featureString);
+    } else {
+      obj.trace_part = hb.shapeWithTraceLimits(font, buffer_trace, featureString, 
+                                                 stop_at, 
+                                                 stop_phase,
+                                                 limits,
+                                                 stop_count);      
+    }
+
     if (stop_count > 0)
       result = createResultArrayFromTrace(font, obj.trace_part, buffer_trace.json(font));
     else
@@ -1694,6 +1701,18 @@ function indexKeyDown(event) {
   }
 }
 
+function setBrowserMode(hbMode) {
+  if (typeof hbMode == 'boolean') {
+    hbBrowserMode = hbMode;
+    scrubber.disabled = hbMode;
+    tlGsubEnd.disabled = hbMode;
+    tlNext.disabled = hbMode;
+    tlPrev.disabled = hbMode;
+    updateResult();
+  }
+  return hbBrowserMode;
+}
+
 // Glue update events...
 UpdateListener('text', 'keyup', UpdateText);
 UpdateListener('unicode', 'keyup', UpdateUnicode);
@@ -1746,6 +1765,7 @@ window.timeLineGsubEnd = timeLineGsubEnd;
 window.timeLineNext = timeLineNext;
 window.updateResult = updateResult;
 window.updateTransfer = updateTransfer;
+window.setBrowserMode = setBrowserMode;
 
 function hbVersionChange(event) {
   let url = new URL(document.location.toString());
@@ -1789,6 +1809,6 @@ function populateHarfBuzzVersionChoice() {
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span> <span id='hbVersionChoice'>fillmein</span>
-</br>Tool Version: 2025-12-18 l
+</br>Tool Version: 2025-12-23 i
 </p>
 </html>

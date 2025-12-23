@@ -1,5 +1,10 @@
 # Change Notes
 
+## 2025-12-23
+- Added console function `setBrowserMode(true)` to switch to non-traced HarfBuzz mode.
+	- To cross-check issues like Noto Sans Bengali v3.000 with HarfBuzz < 12.2.0
+	- `setBrowserMode(false)` switches back to normal mode
+
 ## 2025-12-18
 - Add choice of HarfBuzz versions
 
