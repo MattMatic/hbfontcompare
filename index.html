@@ -277,7 +277,7 @@ button {
 // Dynamically load `hb.js` and `hb.wasm` based on query string `?hb=11.0.1`
 const params = new URL(document.location.toString()).searchParams;
 let hb_version = params.get('hb');
-if (!hb_version) hb_version = '11.0.1';
+if (!hb_version) hb_version = '12.2.0';
 const hbv_validate = /^\d\d\.\d\.\d$/g;
 if (hb_version.match(hbv_validate)) {
   const scriptSource = `./js/hbjs-${hb_version}/hb.js`;
@@ -1775,6 +1775,7 @@ function hbVersionChange(event) {
 
 function populateHarfBuzzVersionChoice() {
   const hbVersionsAvailable = [
+    '12.2.0',
     '12.0.0',
     '11.5.0',
     '11.4.5',
@@ -1809,6 +1810,6 @@ function populateHarfBuzzVersionChoice() {
 <p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
 <p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
 </br>HarfBuzz Version: <span id="hbversion"></span> <span id='hbVersionChoice'>fillmein</span>
-</br>Tool Version: 2025-12-23 i
+</br>Tool Version: 2025-12-24 n
 </p>
 </html>
