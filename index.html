@@ -1081,6 +1081,7 @@ createHarfBuzz().then(hbmodule=>{
 
 function UpdateListener(id, event, foo) {
   let e = document.getElementById(id);
+  if (!e) console.log('!ERROR!', `missing element "${id}"`);
   if (e && !foo) {
     e.addEventListener(event, function(e) {
       updateResult();
@@ -1761,6 +1762,10 @@ function setBrowserMode(hbMode) {
   return hbBrowserMode;
 }
 
+function changeBrowserMode(event) {
+  setBrowserMode(cbBrowserMode.checked);
+}
+
 // Glue update events...
 UpdateListener('text', 'keyup', UpdateText);
 UpdateListener('unicode', 'keyup', UpdateUnicode);
@@ -1793,9 +1798,10 @@ UpdateListener('cbDifference', 'input');
 UpdateListener('showBoundingBox', 'input');
 UpdateListener('showOrigin', 'input');
 UpdateListener('onlyGSUB', 'input', onlyGSUBUpdate);
-UpdateListener('exclusion', 'input');
+//UpdateListener('exclusion', 'input');
 UpdateListener('scrubber', 'input', UpdateScrubber);
 UpdateListener('inputIndex', 'keydown', indexKeyDown);
+UpdateListener('cbBrowserMode', 'change', changeBrowserMode);
 resetScrubber();
 
 // Expose these to the window
@@ -1874,8 +1880,9 @@ function setHarfBuzz(hbNew) {
 
 </script>
 HarfBuzz Version: <span id="hbversion"></span> <span id='hbVersionChoice'>fillmein</span>
+<input type="checkbox" id='cbBrowserMode' title='Ticked = disable tracing to verify font issues with older HarfBuzz versions'><label for="cbBrowserMode" >App-check</label>
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>.
 <br/>github: <a href="https://github.com/MattMatic/hbfontcompare" target="_blank">MattMatic/hbfontcompare</a>
-</br>Tool Version: 2025-12-31 h
+</br>Tool Version: 2025-12-31 i
 </p>
 </html>
