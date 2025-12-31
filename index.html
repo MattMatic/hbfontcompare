@@ -271,28 +271,10 @@ button {
 <p>Debug3:<div id="debugResult3"></div></p>
 --->
 
-<!--<script type="text/javascript" src="./js/hb.js"></script>--> <!-- Module - REQUIRED -->
+<script type="text/javascript" src="./js/hbjs-12.3.0/hb.js"></script> <!-- Module - REQUIRED -->
 <script type="text/javascript" src="./js/hbjs.js"></script> <!-- Wrapper, can be used without -->
 <script high>
-// Dynamically load `hb.js` and `hb.wasm` based on query string `?hb=11.0.1`
-const params = new URL(document.location.toString()).searchParams;
-let hb_version = params.get('hb');
-if (!hb_version) hb_version = '12.2.0';
-const hbv_validate = /^\d\d\.\d\.\d$/g;
-if (hb_version.match(hbv_validate)) {
-  const scriptSource = `./js/hbjs-${hb_version}/hb.js`;
-  const newScriptElement = document.createElement('script');
-  newScriptElement.onload = function() {
-    console.log('loaded ', scriptSource);
-  };
-  newScriptElement.onerror = function() {
-    document.getElementById('hbversion').innerHTML = `<font size=+5 color='red'>MISSING ${hb_version}</font>`;
-  };
-  newScriptElement.src = scriptSource;
-  document.head.appendChild(newScriptElement);
-} else {
-  window.alert(`Illegal version\r\n"${hb_version}"`);
-}
+
 </script>
 
 <script type="text/javascript" src="./js/otinfo.min.js"></script>
@@ -307,6 +289,61 @@ import {CPaths64, GlyphCompareClass} from './js/glyphcompare.mjs';
 window.opentype = opentype;
 window.Layout = Layout;
 
+
+const hbVersions = [];
+window.hbVersions = hbVersions;
+
+function applyHarfBuzz(hbNew) {
+  setHarfBuzz(hbNew);
+  updateResult();
+}
+
+async function loadHarfBuzzVersion(version) {
+  let promise = new Promise((resolve, reject) => {
+    if (hbVersions[version]) {
+      applyHarfBuzz(hb);
+      resolve(hbVersions[version]);
+    }
+    const scriptSource = `./js/hbjs-${version}/hb.js`;
+    const newScriptElement = document.createElement('script');
+    newScriptElement.onload = function() {
+      createHarfBuzz().then(hbmodule=>{
+        loadedHarfBuzzModule(hbmodule);
+        applyHarfBuzz(hbVersions[version]);
+        resolve(hbVersions[version]);
+      });
+    }
+    newScriptElement.onerror = function() {
+      window.alert(`Could not load HarfBuzz ${version}`);
+    }
+    newScriptElement.src = scriptSource;
+    document.head.appendChild(newScriptElement);    
+  });
+  return await promise;
+}
+
+function loadedHarfBuzzModule(module) {
+  const hb = hbjs(module);
+  window.hb = hb;
+  window.harfBuzzModule = module;
+  const version = hb.version_string();
+  //~~//console.log('loadedHarfBuzzModule', version, hb); //~~
+  hbVersions[version] = hb;
+  return hb;
+}
+
+// Dynamically load `hb.js` and `hb.wasm` based on query string `?hb=11.0.1`
+const params = new URL(document.location.toString()).searchParams;
+let hb_version = params.get('hb');
+if (hb_version) {
+  const hbv_validate = /^\d\d\.\d\.\d$/g;
+  if (hb_version.match(hbv_validate)) {
+    //??//loadHarfBuzzVersion(hb_version);
+  } else {
+    window.alert(`Illegal version\r\n"${hb_version}"`);
+  }  
+}
+
 const promises = [
       createHarfBuzz()
     ];
@@ -319,6 +356,7 @@ Promise.all(promises).then(([aharfBuzzModule]) => {
   harfBuzzModule = aharfBuzzModule;
   hb = hbjs(harfBuzzModule);
   window.hb = hb;
+  hbVersions[hb.version_string()] = hb;
   onResourcesLoaded();
 });
 
@@ -370,9 +408,17 @@ document.addEventListener('drop', cancel, false);
 // HarfBuzz SVG Class
 //----------------------------------
 class hbSvgClass {
-  constructor() {
+  constructor(hb) {
     this.options = {};
     this.results = {};
+    this.hb = hb;
+  }
+  setHarfBuzz(hb) {
+    const fbOld = this.fontBlob;
+    this.freeFont();
+    this.hb = hb;
+    if (hb) this.hbVersion = hb.version_string();
+    if (fbOld) this.setFontBlob(fbOld);
   }
   destroy() {
     this.freeFont();
@@ -431,9 +477,9 @@ class hbSvgClass {
       this.fileDescription = '';
     }
     if (!fb) return;
-    this.blob = hb.createBlob(this.fontBlob);
-    this.face = hb.createFace(this.blob, 0);
-    this.font = hb.createFont(this.face);
+    this.blob = this.hb.createBlob(this.fontBlob);
+    this.face = this.hb.createFace(this.blob, 0);
+    this.font = this.hb.createFont(this.face);
     const debgTable = this.face.reference_table("Debg");
     if (debgTable) {
       this.debugInfo = JSON.parse(new TextDecoder("utf8").decode(debgTable));
@@ -444,7 +490,7 @@ class hbSvgClass {
     this.otFont = opentype.parse(this.fontBlob);
     this.otLayout = new Layout(this.otFont, 'GPOS');
 
-    this.gc = new GlyphCompareClass();
+    this.gc = new GlyphCompareClass(this.hb);
     this.gc.setFontBlob(this.fontBlob);
     this.gc.setScriptLanguage(this?.options.script, this?.options.lang);
   }
@@ -1012,6 +1058,8 @@ function onResourcesLoaded() {
     return res.arrayBuffer();
   }).then(function (blob) { // can be used without our wrapper
     window.fontBlob = new Uint8Array(blob);
+    hbsvg1.setHarfBuzz(hb);
+    hbsvg2.setHarfBuzz(hb);
     hbsvg1.setFontBlob(window.fontBlob);
     hbsvg2.freeFontBlob();
     acquireFontAndLists(window.opener);
@@ -1767,10 +1815,22 @@ window.updateResult = updateResult;
 window.updateTransfer = updateTransfer;
 window.setBrowserMode = setBrowserMode;
 
-function hbVersionChange(event) {
+window.hbsvg1 = hbsvg1;
+window.hbsvg2 = hbsvg2;
+window.loadHarfBuzzVersion = loadHarfBuzzVersion;
+
+async function hbVersionChange(event) {
+  /*
   let url = new URL(document.location.toString());
   url.search = `?hb=${cbHarfBuzzVersion.value}`;
   window.location.replace(url.href);
+  */
+  const version = cbHarfBuzzVersion.value;
+  await loadHarfBuzzVersion(version);
+  //setHarfBuzz(hbVersions[version]);
+  //updateResult();
+  //~~//console.log('hbVersionChange', version, hb.version_string()); //~~
+  //~~//hbversion.innerHTML = hb.version_string();
 }
 
 function populateHarfBuzzVersionChoice() {
@@ -1787,6 +1847,7 @@ function populateHarfBuzzVersionChoice() {
   ];
   let html = '<select name="hbVersion" id="cbHarfBuzzVersion">\r\n';
   let knownVersion = false;
+  const hb_version = hbsvg1.hbVersion;
   hbVersionsAvailable.forEach(v=> {
     const thisVersion = (hb_version == v);
     if (thisVersion) knownVersion = true;
@@ -1796,21 +1857,25 @@ function populateHarfBuzzVersionChoice() {
   if (!knownVersion) {
     const hbv = hb.version_string();
     if (hbv) {
-      hbversion.innerHTML = hbv;
+      //??//hbversion.innerHTML = hbv;
     }
   }
   hbVersionChoice.innerHTML = html;
   UpdateListener('cbHarfBuzzVersion', 'change', hbVersionChange);
 }
 
+function setHarfBuzz(hbNew) {
+  hbsvg1.setHarfBuzz(hbNew);
+  hbsvg2.setHarfBuzz(hbNew);
+  hb = hbNew;
+}
+
 //populateHarfBuzzVersionChoice();
 
 </script>
-
-<p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>
-<p>Based on <a href="https://github.com/harfbuzz/harfbuzzjs" target="_blank">harfbuzzjs</a> demo. Supports font drag and drop.</p>
-<p><a href="https://github.com/MattMatic/hbfontcompare" target="_blank">https://github.com/MattMatic/hbfontcompare</a>
-</br>HarfBuzz Version: <span id="hbversion"></span> <span id='hbVersionChoice'>fillmein</span>
-</br>Tool Version: 2025-12-28 h
+HarfBuzz Version: <span id="hbversion"></span> <span id='hbVersionChoice'>fillmein</span>
+<p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>.
+<br/>github: <a href="https://github.com/MattMatic/hbfontcompare" target="_blank">MattMatic/hbfontcompare</a>
+</br>Tool Version: 2025-12-31 h
 </p>
 </html>

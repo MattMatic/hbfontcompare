@@ -9,16 +9,12 @@ const promises = [
       createHarfBuzz()
     ];
 
-let harfBuzzModule;
 let Clipper2Z;
 let Clipper2ZUtils;
-let hb;
 
-Promise.all(promises).then(([aClipper2Z, aharfBuzzModule]) => {
+Promise.all(promises).then(([aClipper2Z]) => {
   Clipper2Z = aClipper2Z;
 
-  harfBuzzModule = aharfBuzzModule;
-  hb = hbjs(harfBuzzModule);
   // -v-v-v- DEBUG: make these available outside the module
   window.Clipper2Z = Clipper2Z;
   // -^-^-^-
@@ -261,8 +257,16 @@ export class CPaths64 {
 }
 
 export class GlyphCompareClass {
-  constructor() {
+  constructor(hb) {
     this.glyphs = {};
+    this.hbFix = false;
+    this.setHarfBuzz(hb);
+  }
+  setHarfBuzz(hb) {
+    const fbOld = this.fontBlob;
+    this.freeFont();
+    this.hb = hb;
+    this.setFontBlob(fbOld);
   }
   destroy() {
     this.freeFont();
@@ -310,9 +314,9 @@ export class GlyphCompareClass {
     this.fontBlob = fb;
     if (!fb) return;
 
-    this.blob = hb.createBlob(this.fontBlob);
-    this.face = hb.createFace(this.blob, 0);
-    this.font = hb.createFont(this.face);
+    this.blob = this.hb.createBlob(this.fontBlob);
+    this.face = this.hb.createFace(this.blob, 0);
+    this.font = this.hb.createFont(this.face);
   }
   //----------------------------------------------------------------------
   // Converts the glyph drawing to an array of point arrays compatible with Clipper2
@@ -322,8 +326,8 @@ export class GlyphCompareClass {
   glyphToPolyline(glyphId) {
     if (!this.glyphs[glyphId]) {
       var ptr = this.font.ptr;
-      var exports = harfBuzzModule.wasmExports;
-      var addFunction = harfBuzzModule.addFunction;
+      const exports = this.hb.hooks.exports;
+      const addFunction = this.hb.hooks.addFunction;
       /*
       var lastXY = {};
       var firstXY = {};
@@ -413,7 +417,7 @@ export class GlyphCompareClass {
     return this.glyphs[glyphId];
   }
   shape(txt, features) {
-    let buffer = hb.createBuffer();
+    let buffer = this.hb.createBuffer();
     buffer.addText(txt);
     buffer.guessSegmentProperties();
     if ((typeof this.script === 'string') && (this.script.length > 0)) {
@@ -427,17 +431,17 @@ export class GlyphCompareClass {
     hb.shape(this.font, buffer, features, 0);
 --*/
 /*--Workaround for pre HarfBuzz 12.2.0 with Indic shaping--*/
-    const exports = hb.hooks.exports;
-    const addFunction = hb.hooks.addFunction;
-    const removeFunction = hb.hooks.removeFunction;
-    const utf8Decoder = hb.hooks.utf8Decoder;
-    const Module = hb.hooks.Module;    
+    const exports = this.hb.hooks.exports;
+    const addFunction = this.hb.hooks.addFunction;
+    const removeFunction = this.hb.hooks.removeFunction;
+    const utf8Decoder = this.hb.hooks.utf8Decoder;
+    const Module = this.hb.hooks.Module;    
     var traceFunc = function(bufferPtr, fontPtr, messagePtr, user_data) {
       return 1;
     }
     var traceFuncPtr = addFunction(traceFunc, 'iiiii');
     exports.hb_buffer_set_message_func(buffer.ptr, traceFuncPtr, 0, 0);
-    hb.shape(this.font, buffer, features, 0);
+    this.hb.shape(this.font, buffer, features, 0);
     removeFunction(traceFuncPtr);
 /*--*/
     this.result = buffer.json(this.font);
