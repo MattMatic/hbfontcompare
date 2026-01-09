@@ -136,10 +136,12 @@ button {
       <span class='tooltip'><input type="text" value="" id="language">
         <span class='tooltiptext tooltip-bottom' id='languageList'>-</span>
       </span>
-      <input type="radio" id="dirLTR"   name="direction" value="LTR" checked>
+      <input type="radio" id="dirLTR"   name="direction" value="LTR">
         <label for="dirLTR">LTR</label>
       <input type="radio" id="dirRTL"   name="direction" value="RTL">
         <label for="dirRTL">RTL</label>
+      <input type="radio" id="dirAuto"   name="direction" value="Auto" checked>
+        <label for="dirAuto">Auto</label>
     </td></tr>
   <tr><td class='label' width="10%">Features:</td>
     <td>
@@ -925,9 +927,11 @@ function updateResult() {
   if (script.value !== '') {
     hbsvg2.options.script = script.value;
     hbsvg2.options.language = language.value;
+    hbsvg2.options.direction = '';
     if (dirLTR.checked)
       hbsvg2.options.direction = 'ltr';
     else
+    if (dirRTL.checked)
       hbsvg2.options.direction = 'rtl';
   } else {
     hbsvg2.options.script = '';
@@ -1773,6 +1777,7 @@ UpdateListener('text', 'keyup', UpdateText);
 UpdateListener('unicode', 'keyup', UpdateUnicode);
 UpdateListener('script', 'keyup', UpdateWithTimeline);
 UpdateListener('language', 'keyup', UpdateWithTimeline);
+UpdateListener('dirAuto', 'input', UpdateWithTimeline);
 UpdateListener('dirLTR', 'input', UpdateWithTimeline);
 UpdateListener('dirRTL', 'input', UpdateWithTimeline);
 UpdateListener('stretch', 'input');
@@ -1885,6 +1890,6 @@ HarfBuzz Version: <span id="hbversion"></span> <span id='hbVersionChoice'>fillme
 <input type="checkbox" id='cbBrowserMode' title='Ticked = disable tracing to verify font issues with older HarfBuzz versions'><label for="cbBrowserMode" >App-check</label>
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>.
 <br/>github: <a href="https://github.com/MattMatic/hbfontcompare" target="_blank">MattMatic/hbfontcompare</a>
-</br>Tool Version: 2026-01-06 s
+</br>Tool Version: 2026-01-09 m
 </p>
 </html>
