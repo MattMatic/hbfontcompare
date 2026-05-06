@@ -997,6 +997,13 @@ function updateResult() {
     p1.destroy();
   }
 
+  if (baseLine.checked) {
+    const x1 = hbsvg1?.results?.x_end;
+    const x2 = hbsvg2?.results?.x_end;
+    if (x2) svgPath += `<path style="stroke:#f37418;stroke-opacity:0.5;stroke-width:5" d="M${x2} -1500 L${x2} 3000"></path>`;
+    if (x1) svgPath += `<path style="stroke:#202080;stroke-opacity:0.5;stroke-width:5" d="M${x1} -1500 L${x1} 3000"></path>`;
+  }
+
   if (hbsvg2.fontBlob) {
     svgPath += svg2;
     harfBuzzResult2.innerHTML = getHarfBuzzResult(hbsvg2);
@@ -1890,6 +1897,6 @@ HarfBuzz Version: <span id="hbversion"></span> <span id='hbVersionChoice'>fillme
 <input type="checkbox" id='cbBrowserMode' title='Ticked = disable tracing to verify font issues with older HarfBuzz versions'><label for="cbBrowserMode" >App-check</label>
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>.
 <br/>github: <a href="https://github.com/MattMatic/hbfontcompare" target="_blank">MattMatic/hbfontcompare</a>
-</br>Tool Version: 2026-01-09 m
+</br>Tool Version: 2026-05-06 <font size=-2>17:30</font>
 </p>
 </html>
