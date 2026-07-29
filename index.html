@@ -97,7 +97,22 @@ button {
 #cbHarfBuzzVersion {
   background-color: #f0f8f0;
 }
-
+dialog::backdrop {
+  backdrop-filter: blur(0.8px);
+  /*background-color: hsl(120, 40%, 50%, 0.2);*/
+}
+dialog {
+  background-color: #e8ece8;
+  min-width: 50vw;
+  max-width: 100vw;
+}
+[aria-label="close"] {
+  appearance: none;
+  background-color: #fcc;
+  float: right;
+  border: 1px solid;
+  border-radius: 50%;
+}
   </style>
 </head>
 <meta charset="utf-8">
@@ -157,6 +172,7 @@ button {
       <button type="button" id="swapFonts" onclick="SwapFonts();">Swap #1 & #2</button>
     </td><td id='dropTwo'>
     <button type="button" id="resetFontTwo" onclick="ResetFontTwo();">Reset #2</button>
+    <button type="button" id="btnCompareDialog" onclick="doShowCompareFonts();">Compare Data</button>
   </td></tr>
   <tr>
     <td class='label'>Font:</td>
@@ -267,6 +283,17 @@ button {
   <td width='45%'><div id='shapeResult2'></div></td>
 </tr>
 </table>
+
+<dialog id='dlgCompareFonts'>
+  <button type='submit' aria-label='close' onclick='dlgCompareFonts.close();'>X</button>
+  <h3>Compare Fonts</h3>
+  <input type='radio' id='rbCompareByName' name='CompareType' checked><label for='rbCompareByName'>Name</label>
+  <input type='radio' id='rbCompareByGID' name='CompareType'><label for='rbCompareByGID'>GID</label>
+  <button id='btnCompareFonts' onclick='doCompareFonts();'>Compare</button>
+  <table id='tblCompareResults'>
+
+  </table>
+</dialog>
 <!--
 <p>Debug1:<div id="debugResult"></div></p>
 <p>Debug2:<div id="debugResult2"></div></p>
@@ -1889,6 +1916,96 @@ function setHarfBuzz(hbNew) {
   hbsvg2.setHarfBuzz(hbNew);
   hb = hbNew;
 }
+
+function doShowCompareFonts() {
+  tblCompareResults.innerHTML = '';
+  dlgCompareFonts.showModal();
+}
+
+function doCompareFonts() {
+  const max1 = hbsvg1?.otFont?.glyphs?.font?.numGlyphs || 0;
+  const max2 = hbsvg2?.otFont?.glyphs?.font?.numGlyphs || 0;
+  let html = '<tr><th>GID</th><th>Name</th><th>LSB</th><th>AX</th><th>Path</th></tr>';
+
+  let diffCount = 0;
+  const data = {
+    gid: '',
+    name: '',
+    lsb: '',
+    ax: '',
+    path: '',
+  };
+  function addDifference(data) {
+    if ((data.lsb.length === 0) && (data.ax.length === 0) && (data.path.length === 0)) return;
+    if (data.path.length === 0) {
+      data.path = '(same)';
+    }
+    diffCount++;
+    html += `<tr><td>${data.gid}</td><td>${data.name}</td><td>${data.lsb}</td><td>${data.ax}</td><td>${data.path}</td></tr>\r\n`;
+    data.lsb = '';
+    data.ax = '';
+    data.path = '';
+  }
+
+  if (max1 !== max2) {
+    // TODO: different number of glyphs
+    data.name = `Glyph Count ${max1} vs ${max2}`;
+    addDifference(data);
+  }
+  let nameMap = new Map();
+  for (let gid=0; gid<max2; gid++) {
+    const g = hbsvg2?.otFont?.glyphs?.glyphs[gid];
+    nameMap.set(g.name, gid);
+  }
+
+  const byName = rbCompareByName.checked;
+  for (let gid=1; gid<max1; gid++) {
+    const g1 = hbsvg1.otFont.glyphs.glyphs[gid];
+    const n1 = g1.name || '';
+    data.gid = gid;
+    data.name = n1;
+
+    let gid2 = gid;
+    if (byName) {
+      gid2 = nameMap.get(n1) || 0;
+      if (!gid2) {
+        data.path = '!MISSING!';
+        addDifference(data);
+        continue;
+      }
+    }
+    const g2 = hbsvg2.otFont.glyphs.glyphs[gid2];
+    const n2 = g2.name;
+    if (g1.leftSideBearing !== g2.leftSideBearing) {
+      data.lsb = `${g1.leftSideBearing}, ${g2.leftSideBearing}`;
+    }
+    if (g1.advanceWidth !== g2.advanceWidth) {
+      data.ax = `${g1.advanceWidth}, ${g2.advanceWidth}`;
+    }
+    const svg1 = g1.toSVG();
+    const svg2 = g2.toSVG();
+    if (svg1 !== svg2) {
+      //data.path = `PATH`;
+      data.path += `<svg xmlns='http://www.w3.org/2000/svg' height='200' width='300' viewBox='-250 -1800 4000 4000'>`;
+      data.path += svg1;
+      data.path += `</svg>`;
+      data.path += `<svg xmlns='http://www.w3.org/2000/svg' height='200' width='300' viewBox='-250 -1800 4000 4000'>`;
+      data.path += svg2;
+      data.path += `</svg>`;
+    }
+
+    addDifference(data);
+    if (diffCount > 100) {
+      data.path = '(stopped)';
+      addDifference(data);
+      break;
+    }
+  }
+  //~~//console.log('doCompareFonts', max1, max2, html); //~~
+  tblCompareResults.innerHTML = html;
+}
+window.doCompareFonts = doCompareFonts;
+window.doShowCompareFonts = doShowCompareFonts;
 
 //populateHarfBuzzVersionChoice();
 
