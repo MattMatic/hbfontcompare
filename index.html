@@ -543,6 +543,7 @@ class hbSvgClass {
     return null;
   }
   getGlyphClass(gid) {
+    if (!this.otFont.tables.gdef) return 0;
     return this.otLayout.getGlyphClass(this.otFont?.tables?.gdef?.classDef, gid);
   }
   getGlyphName(gid) {
@@ -2014,6 +2015,6 @@ HarfBuzz Version: <span id="hbversion"></span> <span id='hbVersionChoice'>fillme
 <input type="checkbox" id='cbBrowserMode' title='Ticked = disable tracing to verify font issues with older HarfBuzz versions'><label for="cbBrowserMode" >App-check</label>
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>.
 <br/>github: <a href="https://github.com/MattMatic/hbfontcompare" target="_blank">MattMatic/hbfontcompare</a>
-</br>Tool Version: 2026-05-06 <font size=-2>17:30</font>
+</br>Tool Version: 2026-10-22 <font size=-2>11:00</font>
 </p>
 </html>
