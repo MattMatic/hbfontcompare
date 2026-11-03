@@ -315,6 +315,8 @@ dialog {
 import * as opentype from './js/opentype.min.mjs';
 import Layout from './js/opentype.layout.gdef.mjs';
 import {CPaths64, GlyphCompareClass} from './js/glyphcompare.mjs';
+import { HB_VERSIONS, loadHarfBuzz } from './js/hb-engine.mjs';
+window.hbEngine = { HB_VERSIONS, loadHarfBuzz };
 window.opentype = opentype;
 window.Layout = Layout;
 
@@ -328,27 +330,25 @@ function applyHarfBuzz(hbNew) {
 }
 
 async function loadHarfBuzzVersion(version) {
-  let promise = new Promise((resolve, reject) => {
-    if (hbVersions[version]) {
-      applyHarfBuzz(hb);
-      resolve(hbVersions[version]);
+  // Bundled builds load from ./js/hbjs-<version>/, the rest from the jsDelivr CDN (see js/hb-engine.mjs)
+  let engine = hbVersions[version];
+  if (!engine) {
+    try {
+      engine = await loadHarfBuzz(version);
+    } catch (err) {
+      console.error(err);
+      window.alert(`Could not load HarfBuzz ${version} - ${err.message}`);
+      populateHarfBuzzVersionChoice();   // put the drop-down back to what is really in use
+      return null;
     }
-    const scriptSource = `./js/hbjs-${version}/hb.js`;
-    const newScriptElement = document.createElement('script');
-    newScriptElement.onload = function() {
-      createHarfBuzz().then(hbmodule=>{
-        loadedHarfBuzzModule(hbmodule);
-        applyHarfBuzz(hbVersions[version]);
-        resolve(hbVersions[version]);
-      });
-    }
-    newScriptElement.onerror = function() {
-      window.alert(`Could not load HarfBuzz ${version}`);
-    }
-    newScriptElement.src = scriptSource;
-    document.head.appendChild(newScriptElement);    
-  });
-  return await promise;
+    hbVersions[version] = engine;
+  }
+  applyHarfBuzz(engine);
+  // keep the version in the address so the page can be shared
+  const url = new URL(document.location.toString());
+  url.searchParams.set('hb', version);
+  history.replaceState(null, '', url);
+  return engine;
 }
 
 function loadedHarfBuzzModule(module) {
@@ -364,13 +364,9 @@ function loadedHarfBuzzModule(module) {
 // Dynamically load `hb.js` and `hb.wasm` based on query string `?hb=11.0.1`
 const params = new URL(document.location.toString()).searchParams;
 let hb_version = params.get('hb');
-if (hb_version) {
-  const hbv_validate = /^\d\d\.\d\.\d$/g;
-  if (hb_version.match(hbv_validate)) {
-    //??//loadHarfBuzzVersion(hb_version);
-  } else {
-    window.alert(`Illegal version\r\n"${hb_version}"`);
-  }  
+if (hb_version && !HB_VERSIONS.some(v => v.hb === hb_version)) {
+  window.alert(`Unknown HarfBuzz version "${hb_version}"`);
+  hb_version = null;
 }
 
 const promises = [
@@ -385,6 +381,7 @@ Promise.all(promises).then(([aharfBuzzModule]) => {
   harfBuzzModule = aharfBuzzModule;
   hb = hbjs(harfBuzzModule);
   window.hb = hb;
+  window.hbDrawEngine = hb;   // draws glyph outlines for engines without raw WASM access (harfbuzzjs 1.x)
   hbVersions[hb.version_string()] = hb;
   onResourcesLoaded();
 });
@@ -1095,7 +1092,7 @@ function onResourcesLoaded() {
   let fontname = 'samples/Gulzar-Regular-1.002.ttf';
   fetch(fontname).then(function (res) {
     return res.arrayBuffer();
-  }).then(function (blob) { // can be used without our wrapper
+  }).then(async function (blob) { // can be used without our wrapper
     window.fontBlob = new Uint8Array(blob);
     hbsvg1.setHarfBuzz(hb);
     hbsvg2.setHarfBuzz(hb);
@@ -1105,6 +1102,10 @@ function onResourcesLoaded() {
     updateResult();
     updateLists();
     populateHarfBuzzVersionChoice();
+    if (hb_version && (hb_version !== hb.version_string())) {
+      await loadHarfBuzzVersion(hb_version);   // `?hb=14.3.0`
+      populateHarfBuzzVersionChoice();
+    }
   });
 }
 
@@ -1306,8 +1307,9 @@ function findLastLookup(trace, index) {
   return res;
 }
 
-function generateBuffer(text, options) {
-  let buffer = hb.createBuffer();
+function generateBuffer(text, options, traced = false) {
+  // `traced` buffers are for shapeWithTraceLimits (needed by harfbuzzjs 1.x engines; others ignore it)
+  let buffer = hb.createBuffer(traced);
   buffer.addText(text);
   buffer.guessSegmentProperties();
   if (options.direction && options.direction.length > 0) {
@@ -1322,12 +1324,15 @@ function generateBuffer(text, options) {
   return buffer;
 }
 
-function transferResult(result, trace_entry, hb_entry, index) {
+function transferResult(result, trace_entry, hb_entry, index, positioned = true) {
   let re = {};
   re.g = trace_entry.g;
   re.cl = trace_entry.cl;
   re.i = index;
-  if (typeof trace_entry.ax === 'undefined') {
+  // HarfBuzz 12.3.0 leaves ax/ay/dx/dy out of the trace until GPOS places the glyphs; from 13.x they are
+  // always there (as zeros), which would pile every glyph on top of the others. So positions are only
+  // trusted once GPOS has started (`positioned`); before that the glyph bounds decide the advance.
+  if (!positioned || (typeof trace_entry.ax === 'undefined')) {
     re.ax = NaN; // This is picked up later and we use the glyphs max.x to advance
     re.ay = 0;
     re.dx = 0;
@@ -1344,7 +1349,7 @@ function transferResult(result, trace_entry, hb_entry, index) {
   result.push(re);
 }
 
-function createResultArrayFromTrace(font, trace, hb_result) {
+function createResultArrayFromTrace(font, trace, hb_result, obj) {
   // NOTE: hb_result[0].cl shows us which direction we should generate
   //       compared to the trace.cl
   // NOTE: in the case of a GSUB sequence, we can take the ax,ay,dx,dy from the hb_result
@@ -1353,6 +1358,19 @@ function createResultArrayFromTrace(font, trace, hb_result) {
   const tr = trace[trace.length - 1];
   const t = tr.t;
   if (typeof t === 'undefined') return result;
+
+  // Positions only exist once GPOS has started (same test as generateHtmlForTrace)
+  const positioned = (trace.gpos_point >= 0) && ((trace.length - 1) >= trace.gpos_point);
+
+  // HarfBuzz 13.x adds decompose/compose steps, and reorder was always there: while HarfBuzz is working on
+  // Unicode the buffer holds code points, not glyph IDs (`glyphs` is false). Show the nominal glyph for each
+  // code point so something meaningful is drawn, rather than treating a code point as a glyph ID.
+  const toGlyph = (cp) => {
+    const otFont = obj && obj.otFont;
+    if (!otFont) return 0;
+    try { return otFont.charToGlyphIndex(String.fromCodePoint(cp)) || 0; } catch (e) { return 0; }
+  };
+  const asEntry = (te) => (tr.glyphs === false) ? { ...te, g: toGlyph(te.g), cp: te.g } : te;
 
   // Scan for ' at ...' in the tr.m field
   const m = tr.m;
@@ -1377,7 +1395,7 @@ function createResultArrayFromTrace(font, trace, hb_result) {
     while (i < t.length) {
       const te = t[i];
       if (typeof te === 'undefined') break;
-      transferResult(result, te, hb_result[i], i);
+      transferResult(result, asEntry(te), hb_result[i], i, positioned);
       i++;
     }
   } else {
@@ -1386,7 +1404,7 @@ function createResultArrayFromTrace(font, trace, hb_result) {
     let hi = 0;
     while (i >= 0) {
       const te = t[i];
-      transferResult(result, te, hb_result[hi], i);
+      transferResult(result, asEntry(te), hb_result[hi], i, positioned);
       hi++;
       i--;
     }
@@ -1420,7 +1438,7 @@ function findNextEvent(obj, text, startIndex, forward=true) {
   const limits = {maxGlyphRatio:100.0, maxDepth:100};
   let options = obj.options;
 
-  let buffer = generateBuffer(text, options);
+  let buffer = generateBuffer(text, options, true);
   let featureString = '';
   if (options.featureString && options.featureString.length > 0) {
     featureString = `+DUMY,${options.featureString},`; // Copied from Crowbar... "SERIOUSLY?"
@@ -1485,7 +1503,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
   if ("scale" in options)
     font.setScale(options.scale, options.scale); // Optional, if not given will be in font upem
 
-  let buffer = generateBuffer(text, options);
+  let buffer = generateBuffer(text, options, true);
   let featureString = '';
   if (options.featureString && options.featureString.length > 0) {
     featureString = `+DUMY,${options.featureString},`; // Copied from Crowbar... "SERIOUSLY?"
@@ -1503,7 +1521,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
   // NOTE: doTimeline is currently always true ;-)
   if (doTimeline) {
     scrubber_count.innerText = obj.trace.count;
-    let buffer_trace = generateBuffer(text, options);
+    let buffer_trace = generateBuffer(text, options, true);
     if (hbBrowserMode && !stop_count) {
       obj.trace_part = hb.shape(font, buffer_trace, featureString);
     } else {
@@ -1515,7 +1533,7 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
     }
 
     if (stop_count > 0)
-      result = createResultArrayFromTrace(font, obj.trace_part, buffer_trace.json(font));
+      result = createResultArrayFromTrace(font, obj.trace_part, buffer_trace.json(font), obj);
     else
       result = buffer_trace.json(font);
 
@@ -1862,6 +1880,7 @@ window.timeLineNext = timeLineNext;
 window.updateResult = updateResult;
 window.updateTransfer = updateTransfer;
 window.setBrowserMode = setBrowserMode;
+window.createResultArrayFromTrace = createResultArrayFromTrace;   // for console debugging of the timeline
 
 window.hbsvg1 = hbsvg1;
 window.hbsvg2 = hbsvg2;
@@ -1882,24 +1901,16 @@ async function hbVersionChange(event) {
 }
 
 function populateHarfBuzzVersionChoice() {
-  const hbVersionsAvailable = [
-    '12.3.0',
-    '12.2.0',
-    '12.0.0',
-    '11.5.0',
-    '11.4.5',
-    //'11.4.4',
-    //'11.4.1',
-    '11.3.3',
-    '11.0.1',
-  ];
+  // Every version the page can load: bundled ones come with the page, the others are fetched on first use
+  const hbVersionsAvailable = HB_VERSIONS.map(v => v.hb);
+  const bundled = new Set(HB_VERSIONS.filter(v => v.bundled).map(v => v.hb));
   let html = '<select name="hbVersion" id="cbHarfBuzzVersion">\r\n';
   let knownVersion = false;
   const hb_version = hbsvg1.hbVersion;
   hbVersionsAvailable.forEach(v=> {
     const thisVersion = (hb_version == v);
     if (thisVersion) knownVersion = true;
-    html += `<option value="${v}"${thisVersion?" selected":""}>${v}</option>\r\n`;    
+    html += `<option value="${v}"${thisVersion?" selected":""}>${bundled.has(v) ? v : v + ' (web)'}</option>\r\n`;    
   });
   html += '</select>';
   if (!knownVersion) {
@@ -1916,6 +1927,7 @@ function setHarfBuzz(hbNew) {
   hbsvg1.setHarfBuzz(hbNew);
   hbsvg2.setHarfBuzz(hbNew);
   hb = hbNew;
+  window.hb = hbNew;   // as the old loader did; window.hbDrawEngine stays the bundled boot engine
 }
 
 function doShowCompareFonts() {
@@ -2015,6 +2027,6 @@ HarfBuzz Version: <span id="hbversion"></span> <span id='hbVersionChoice'>fillme
 <input type="checkbox" id='cbBrowserMode' title='Ticked = disable tracing to verify font issues with older HarfBuzz versions'><label for="cbBrowserMode" >App-check</label>
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>.
 <br/>github: <a href="https://github.com/MattMatic/hbfontcompare" target="_blank">MattMatic/hbfontcompare</a>
-</br>Tool Version: 2026-10-22 <font size=-2>11:00</font>
+</br>Tool Version: 2026-11-03 <font size=-2>17:05</font>
 </p>
 </html>
