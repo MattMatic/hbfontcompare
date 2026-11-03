@@ -44,6 +44,11 @@ https://mattmatic.github.io/hbfontcompare/
 - The "Download SVG" button saves the SVG file so you can share!
 
 
+## HarfBuzz version
+The **HarfBuzz Version** drop-down at the bottom selects the HarfBuzz release used for shaping and tracing, from 10.0.0 to 15.0.0.
+Versions marked *(web)* are fetched from the jsDelivr CDN on first use (internet needed); 11.0.1 to 12.3.0 are bundled.
+The choice is kept in the address, e.g. `?hb=14.3.0`, so a particular version can be shared as a link.
+
 ## Stepping through GSUB/GPOS
 The "Timeline" 'scrubber' can let you walk through the GSUB and GPOS table rules to debug rules.
 When the slider is fully at the left, the final output is shown (this is the default).
