@@ -1725,19 +1725,23 @@ function hbToSvg(obj, text, options, doTimeline, doUpdateScrubInfo)
 }
 
 function textToUnicode(str) {
-  return str.split('').map(function (value, index, array) {
-    let temp = value.charCodeAt(0).toString(16); //.toUpperCase();
-    return temp;
+  // Iterate by code point so characters beyond the BMP give a single value (e.g. fba80)
+  return Array.from(str).map(function (value) {
+    return value.codePointAt(0).toString(16);
   }).join(' ');
 }
 
 function unicodeToText(uni, maxLength) {
-  let txt = uni.split(' ').map(function(value, index, array) {
-    if (value.length == 0) return '';
-    return String.fromCharCode('0x'+value);
-  }).join('');
-  if (maxLength) txt = txt.slice(0, maxLength); // Keep only 100 characters
-  return txt;
+  // Hex values may be delimited by any non-hex character. This also
+  // silently ignores "U+" and "\u" prefixes (u, +, \ are non-hex).
+  let chars = uni.split(/[^0-9a-fA-F]+/).filter(function (value) {
+    return value.length > 0;
+  }).map(function (value) {
+    let cp = parseInt(value, 16);
+    return cp <= 0x10FFFF ? String.fromCodePoint(cp) : ''; // skip out-of-range values
+  });
+  if (maxLength) chars = chars.slice(0, maxLength); // Keep only 100 characters
+  return chars.join('');
 }
 
 function resetScrubber() {
@@ -1752,7 +1756,7 @@ function UpdateUnicode(e) {
 
 function UpdateText(e) {
   resetScrubber();
-  text.value = text.value.slice(0, 100); // throw away silly amounts of text. Keep only 100 characters
+  text.value = Array.from(text.value).slice(0, 100).join(''); // throw away silly amounts of text. Keep only 100 characters
   unicode.value = textToUnicode(text.value);
   updateResult();
 }
@@ -2027,6 +2031,6 @@ HarfBuzz Version: <span id="hbversion"></span> <span id='hbVersionChoice'>fillme
 <input type="checkbox" id='cbBrowserMode' title='Ticked = disable tracing to verify font issues with older HarfBuzz versions'><label for="cbBrowserMode" >App-check</label>
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>.
 <br/>github: <a href="https://github.com/MattMatic/hbfontcompare" target="_blank">MattMatic/hbfontcompare</a>
-</br>Tool Version: 2026-11-03 <font size=-2>17:05</font>
+</br>Tool Version: 2026-11-10 <font size=-2>16:15</font>
 </p>
 </html>
