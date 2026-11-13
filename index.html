@@ -949,19 +949,14 @@ function updateResult() {
       '<path style="stroke:#ff4040;stroke-opacity:0.5;stroke-width:5" d="M0 -1500 L0 3000"></path>';
   }
 
+  // Forced direction applies regardless of script (empty = let HarfBuzz guess)
+  hbsvg2.options.direction = dirLTR.checked ? 'ltr' : (dirRTL.checked ? 'rtl' : '');
   if (script.value !== '') {
     hbsvg2.options.script = script.value;
     hbsvg2.options.language = language.value;
-    hbsvg2.options.direction = '';
-    if (dirLTR.checked)
-      hbsvg2.options.direction = 'ltr';
-    else
-    if (dirRTL.checked)
-      hbsvg2.options.direction = 'rtl';
   } else {
     hbsvg2.options.script = '';
     hbsvg2.options.language = '';
-    hbsvg2.options.direction = '';
   }
   hbsvg2.options.featureString = features.value;
   hbsvg2.options.scale = scale.value;
@@ -2031,6 +2026,6 @@ HarfBuzz Version: <span id="hbversion"></span> <span id='hbVersionChoice'>fillme
 <input type="checkbox" id='cbBrowserMode' title='Ticked = disable tracing to verify font issues with older HarfBuzz versions'><label for="cbBrowserMode" >App-check</label>
 <p>Also useful: <a href="https://www.corvelsoftware.co.uk/crowbar/" target="_blank">Crowbar Font Tester (Simon Cozens)</a>.
 <br/>github: <a href="https://github.com/MattMatic/hbfontcompare" target="_blank">MattMatic/hbfontcompare</a>
-</br>Tool Version: 2026-11-10 <font size=-2>16:15</font>
+</br>Tool Version: 2026-11-13 <font size=-2>09:05</font>
 </p>
 </html>
